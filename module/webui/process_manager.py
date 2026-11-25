@@ -1,4 +1,5 @@
 import argparse
+import collections
 import os
 import queue
 import re
@@ -27,6 +28,9 @@ from module.webui.setting import State
 
 _TASK_START = re.compile(r"Scheduler: Start task `([^`]+)`")
 _TASK_END = "Scheduler: End task"
+# Plain-text log tail kept per instance for the API (the renderables list stays for PyWebIO)
+LOG_TAIL_LINES = 2000
+LOG_LINE_MAX_CHARS = 16 * 1024
 
 
 def _iso(timestamp: Optional[float]) -> Optional[str]:
@@ -63,6 +67,8 @@ class ProcessManager:
         self.last_activity_at: Optional[float] = None
         self.current_task: Optional[str] = None
         self._text_console = Console(no_color=True, width=200)
+        self.log_tail = collections.deque(maxlen=LOG_TAIL_LINES)
+        self.log_seq = 0
 
     def start(self, func, ev: threading.Event = None) -> bool:
         """
@@ -132,9 +138,9 @@ class ProcessManager:
                         f"[{self.config_name}] still alive {self.stop_join_timeout}s after kill"
                     )
                 else:
-                    self.renderables.append(
-                        f"[{self.config_name}] exited. Reason: Manual stop\n"
-                    )
+                    line = f"[{self.config_name}] exited. Reason: Manual stop\n"
+                    self.renderables.append(line)
+                    self._append_text(line)
                     self._observe_exit()
             if self.thd_log_queue_handler is not None:
                 self.thd_log_queue_handler.join(timeout=1)
@@ -188,11 +194,29 @@ class ProcessManager:
                 text = capture.get()
         except Exception:
             return
+        self._append_text(text)
         match = _TASK_START.search(text)
         if match:
             self.current_task = match.group(1)
         elif _TASK_END in text:
             self.current_task = None
+
+    def _append_text(self, text: str) -> None:
+        text = text.rstrip("\n")
+        if len(text) > LOG_LINE_MAX_CHARS:
+            text = text[:LOG_LINE_MAX_CHARS] + " …(truncated)"
+        self.log_seq += 1
+        self.log_tail.append((self.log_seq, text))
+
+    def log_since(self, after: int = 0, limit: int = 500) -> dict:
+        """
+        Plain-text log lines with seq > after, oldest first, at most limit of them
+        (the newest ones when more are available).
+        """
+        lines = [{"seq": seq, "text": text} for seq, text in list(self.log_tail) if seq > after]
+        if limit and len(lines) > limit:
+            lines = lines[-limit:]
+        return {"lines": lines, "lastSeq": self.log_seq}
 
     def status(self) -> dict:
         """

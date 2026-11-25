@@ -12,22 +12,33 @@ Access:
 - Requests carrying an `Origin` of another site are refused (blocks cross-site POSTs from a
   browser tab).
 """
+import asyncio
 import hmac
 import ipaddress
+import json
 import os
 import time
 from datetime import datetime, timezone
 from typing import Callable, Dict, Optional
 from urllib.parse import urlsplit
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, RedirectResponse, StreamingResponse
 from starlette.routing import Mount, Route
+from starlette.staticfiles import StaticFiles
 
 from module.control.instances import InstanceService, UnknownInstance
 
 API_PREFIX = "/api/v1"
 API_VERSION = 1
+DASHBOARD_PREFIX = "/dashboard"
+# Server-sent events: how often the stream checks for changes, heartbeat interval,
+# and the most log lines sent per instance per check (older ones are skipped; the
+# client can page them from /logs)
+EVENTS_POLL_SECONDS = 0.5
+EVENTS_HEARTBEAT_SECONDS = 15.0
+EVENTS_MAX_LINES = 200
 _LOOPBACK_NAMES = ("localhost",)
 
 
@@ -72,6 +83,9 @@ class ControlApi:
             return _error(403, "cross_origin", "Cross-site requests are not allowed")
         if self.password is not None:
             scheme, _, token = request.headers.get("authorization", "").partition(" ")
+            if request.method == "GET" and not token:
+                # EventSource cannot send headers
+                scheme, token = "bearer", request.query_params.get("access_token", "")
             if scheme.lower() != "bearer" or not hmac.compare_digest(token.encode(), self.password.encode()):
                 return _error(401, "unauthorized", "Send Authorization: Bearer <password>")
             return None
@@ -89,6 +103,8 @@ class ControlApi:
                 return handler(request)
             except UnknownInstance as e:
                 return _error(404, "unknown_instance", f"No instance named {e.args[0]!r}")
+            except ValueError as e:
+                return _error(400, "bad_request", str(e))
         return endpoint
 
     # ------------------------------------------------------------ endpoints
@@ -129,6 +145,67 @@ class ControlApi:
     def restart(self, request: Request) -> JSONResponse:
         return JSONResponse(self.service.restart(request.path_params["instance_id"]))
 
+    def logs(self, request: Request) -> JSONResponse:
+        after = int(request.query_params.get("after", "0"))
+        limit = min(max(int(request.query_params.get("limit", "500")), 1), 2000)
+        return JSONResponse(self.service.logs(request.path_params["instance_id"], after, limit))
+
+    def tasks(self, request: Request) -> JSONResponse:
+        return JSONResponse(self.service.tasks(request.path_params["instance_id"]))
+
+    async def events(self, request: Request):
+        """
+        Server-sent events. Each connection only keeps cursors (last revision and last log
+        seq per instance) and reads the bounded buffers, so a slow or stalled browser never
+        holds memory or blocks a worker. After a reconnect the client refetches the REST
+        snapshot, which stays authoritative.
+        """
+        refused = self._refuse(request)
+        if refused is not None:
+            return refused
+        service = self.service
+
+        def sse(event_type: str, data: dict, event_id: Optional[int] = None) -> str:
+            head = f"id: {event_id}\n" if event_id is not None else ""
+            return f"{head}event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+        async def stream():
+            status_seen = {}
+            log_seen = {}
+            event_id = 0
+            last_beat = time.time()
+            yield "retry: 3000\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                statuses = await run_in_threadpool(service.list_instances)
+                for status in statuses:
+                    iid = status["id"]
+                    key = (status["revision"], status["state"], status["currentTask"])
+                    if status_seen.get(iid) != key:
+                        status_seen[iid] = key
+                        event_id += 1
+                        yield sse("instance.status.changed", {"instanceId": iid, "data": status}, event_id)
+                    if iid not in log_seen:
+                        # Start at the current end; the backlog comes from /logs
+                        log_seen[iid] = service.logs(iid, 0, 1)["lastSeq"]
+                        continue
+                    chunk = service.logs(iid, log_seen[iid], EVENTS_MAX_LINES)
+                    if chunk["lines"]:
+                        log_seen[iid] = chunk["lastSeq"]
+                        event_id += 1
+                        yield sse("log.appended", {"instanceId": iid, "lines": chunk["lines"]}, event_id)
+                now = time.time()
+                if now - last_beat >= EVENTS_HEARTBEAT_SECONDS:
+                    last_beat = now
+                    yield ": ping\n\n"
+                await asyncio.sleep(EVENTS_POLL_SECONDS)
+
+        return StreamingResponse(stream(), media_type="text/event-stream", headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        })
+
     def routes(self):
         g = self._guarded
         return [
@@ -138,12 +215,23 @@ class ControlApi:
             Route("/instances/{instance_id}/start", g(self.start), methods=["POST"]),
             Route("/instances/{instance_id}/stop", g(self.stop), methods=["POST"]),
             Route("/instances/{instance_id}/restart", g(self.restart), methods=["POST"]),
+            Route("/instances/{instance_id}/logs", g(self.logs), methods=["GET"]),
+            Route("/instances/{instance_id}/tasks", g(self.tasks), methods=["GET"]),
+            Route("/events", self.events, methods=["GET"]),
         ]
 
     def mount(self) -> Mount:
         return Mount(API_PREFIX, routes=self.routes())
 
 
-def mount_control_api(app, api: ControlApi) -> None:
-    """Put the API in front of the PyWebIO routes of an existing Starlette app"""
-    app.router.routes.insert(0, api.mount())
+def mount_control_api(app, api: ControlApi, dashboard_dir: Optional[str] = None) -> None:
+    """
+    Put the API (and the built dashboard, when dashboard_dir exists) in front of the
+    PyWebIO routes of an existing Starlette app.
+    """
+    routes = [api.mount()]
+    if dashboard_dir and os.path.isdir(dashboard_dir):
+        routes.append(Route(DASHBOARD_PREFIX, lambda request: RedirectResponse(DASHBOARD_PREFIX + "/")))
+        routes.append(Mount(DASHBOARD_PREFIX, app=StaticFiles(directory=dashboard_dir, html=True)))
+    for route in reversed(routes):
+        app.router.routes.insert(0, route)

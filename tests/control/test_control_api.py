@@ -173,3 +173,135 @@ def test_same_origin_requests_allowed(server):
 def test_localhost_name_allowed(server):
     client = server(base_url="http://localhost:22267")
     assert client.get("/api/v1/health").status_code == 200
+
+
+def wait_for(predicate, timeout=5.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.05)
+    return predicate()
+
+
+def test_logs_tail(server):
+    client = server()
+    client.post("/api/v1/instances/alas/start")
+    assert wait_for(lambda: client.get("/api/v1/instances/alas/logs").json()["lines"])
+    body = client.get("/api/v1/instances/alas/logs").json()
+    assert "Scheduler: Start task `Commission`" in body["lines"][-1]["text"]
+    last = body["lastSeq"]
+    assert client.get("/api/v1/instances/alas/logs?after={}".format(last)).json()["lines"] == []
+    client.post("/api/v1/instances/alas/stop")
+    after_stop = client.get("/api/v1/instances/alas/logs?after={}".format(last)).json()["lines"]
+    assert after_stop[-1]["text"].endswith("Reason: Manual stop")
+    assert client.get("/api/v1/instances/alas/logs?after=x").status_code == 400
+
+
+def test_tasks_without_provider_is_empty(server):
+    assert server().get("/api/v1/instances/alas/tasks").json() == {"running": [], "pending": [], "waiting": []}
+
+
+def test_tasks_first_pending_is_running_only_while_alive():
+    class Manager:
+        alive = True
+
+    service = InstanceService(
+        list_instances=lambda: ["alas"],
+        get_manager=lambda name: Manager,
+        default_func=lambda name: "alas",
+        tasks=lambda name: {"pending": [{"command": "Commission"}, {"command": "Research"}],
+                            "waiting": [{"command": "Daily"}]},
+    )
+    assert service.tasks("alas") == {"running": [{"command": "Commission"}], "pending": [{"command": "Research"}],
+                                     "waiting": [{"command": "Daily"}]}
+    Manager.alive = False
+    assert service.tasks("alas")["running"] == []
+    assert len(service.tasks("alas")["pending"]) == 2
+
+
+def _read_events(api, host="127.0.0.1:22267", client=("127.0.0.1", 50000), chunks=3, timeout=5.0):
+    import asyncio
+    from starlette.requests import Request
+
+    async def never_disconnect():
+        await asyncio.sleep(3600)
+
+    scope = {"type": "http", "method": "GET", "path": "/api/v1/events", "query_string": b"",
+             "headers": [(b"host", host.encode())], "client": client}
+
+    async def run():
+        response = await api.events(Request(scope, never_disconnect))
+        if not hasattr(response, "body_iterator"):
+            return response, []
+        out = []
+        iterator = response.body_iterator.__aiter__()
+        while len(out) < chunks:
+            out.append(await asyncio.wait_for(iterator.__anext__(), timeout))
+        await iterator.aclose()
+        return response, out
+
+    return asyncio.get_event_loop().run_until_complete(run())
+
+
+def _api(spawns):
+    service = InstanceService(
+        list_instances=lambda: ["alas"],
+        get_manager=ProcessManager.get_manager,
+        default_func=lambda name: spawns,
+    )
+    return ControlApi(service)
+
+
+def test_events_stream_status_then_logs(server):
+    server()
+    api = _api(server.spawns)
+    response, chunks = _read_events(api, chunks=2)
+    assert response.media_type == "text/event-stream"
+    assert chunks[0].startswith("retry:")
+    assert "event: instance.status.changed" in chunks[1]
+    assert '"state": "stopped"' in chunks[1]
+
+    # A connection open while a worker logs gets the state change, then the new lines
+    import asyncio
+    from starlette.requests import Request
+
+    async def never_disconnect():
+        await asyncio.sleep(3600)
+
+    scope = {"type": "http", "method": "GET", "path": "/api/v1/events", "query_string": b"",
+             "headers": [(b"host", b"127.0.0.1:22267")], "client": ("127.0.0.1", 50000)}
+
+    async def run():
+        response = await api.events(Request(scope, never_disconnect))
+        iterator = response.body_iterator.__aiter__()
+        out = [await iterator.__anext__(), await iterator.__anext__()]  # retry, stopped
+        ProcessManager.get_manager("alas").start(server.spawns)
+        while not any("log.appended" in c for c in out):
+            out.append(await asyncio.wait_for(iterator.__anext__(), 10))
+        await iterator.aclose()
+        return "".join(out)
+
+    joined = asyncio.get_event_loop().run_until_complete(run())
+    assert '"state": "running"' in joined
+    assert "Scheduler: Start task `Commission`" in joined
+
+
+def test_events_refuse_cross_site(server):
+    server()
+    response, chunks = _read_events(_api(server.spawns), host="evil.example:22267")
+    assert response.status_code == 403
+    assert chunks == []
+
+
+def test_dashboard_served_when_built(tmp_path, server):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<html>dashboard</html>")
+    app = Starlette(routes=[Route("/", lambda request: PlainTextResponse("pywebio"))])
+    mount_control_api(app, _api(server.spawns), dashboard_dir=str(dist))
+    client = TestClient(_AsClient(app, "127.0.0.1"), base_url="http://127.0.0.1:22267")
+    r = client.get("/dashboard", allow_redirects=False)
+    assert r.status_code in (302, 307)
+    assert client.get("/dashboard/").text == "<html>dashboard</html>"
+    assert client.get("/").text == "pywebio"

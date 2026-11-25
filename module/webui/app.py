@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import queue
 import threading
 import time
@@ -1562,12 +1563,27 @@ def app():
             get_manager=ProcessManager.get_manager,
             default_func=get_config_mod,
             stop_event=lambda: updater.event,
+            tasks=_instance_tasks,
         ),
         password=key,
         health_details=lambda: {"logQueueManagerAlive": _log_queue_manager_alive()},
-    ))
+    ), dashboard_dir=os.path.abspath("./dashboard/dist"))
 
     return app
+
+
+def _instance_tasks(config_name: str) -> dict:
+    """Pending and waiting tasks, computed the same way as the GUI overview"""
+    config = load_config(config_name)
+    config.get_next_task()
+
+    def as_dict(func: Function) -> dict:
+        return {"command": func.command, "nextRun": str(func.next_run)}
+
+    return {
+        "pending": [as_dict(f) for f in config.pending_task],
+        "waiting": [as_dict(f) for f in config.waiting_task],
+    }
 
 
 def _log_queue_manager_alive() -> Optional[bool]:
