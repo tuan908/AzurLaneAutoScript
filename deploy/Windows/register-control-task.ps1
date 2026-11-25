@@ -11,7 +11,7 @@ if ($Unregister) {
 }
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$Launcher = Join-Path $Root 'start-control.bat'
+$Launcher = Join-Path $Root 'start-control.vbs'
 if (!(Test-Path (Join-Path $Root 'dashboard\dist\index.html'))) {
     throw 'Build dashboard/dist before registering the task.'
 }
@@ -20,7 +20,7 @@ if (!(Test-Path (Join-Path $Root 'toolkit\python.exe'))) {
 }
 
 $User = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-$Action = New-ScheduledTaskAction -Execute $env:ComSpec -Argument "/d /c `"`"$Launcher`" --port $Port`"" -WorkingDirectory $Root
+$Action = New-ScheduledTaskAction -Execute (Join-Path $env:WINDIR 'System32\wscript.exe') -Argument "`"$Launcher`" $Port" -WorkingDirectory $Root
 $Trigger = New-ScheduledTaskTrigger -AtLogOn -User $User
 $Principal = New-ScheduledTaskPrincipal -UserId $User -LogonType Interactive -RunLevel Limited
 $Settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -RestartCount 3 `

@@ -10,17 +10,15 @@ bun run build
 ```
 
 Stop the existing ALAS launcher before starting the control server for that installation.
-From the Windows ALAS folder, run:
-
-```bat
-start-control.bat
-```
+Double-click `start-control.vbs` in File Explorer to launch it without a console window.
+Startup output goes to `log/control-launch.log`.
 
 Open [ALAS Control Center](http://127.0.0.1:22267/dashboard/). The batch file builds missing
 dashboard assets if Bun is available. After a code update, rebuild on the development machine
-and replace `dashboard/dist` with the new build. Use `start-control.bat --port 22367` when the
-default port is occupied, or pass `--run profile-name` to start an existing profile on launch.
-Press Ctrl+C in the launcher window for a graceful shutdown. Closing the browser leaves the
+and replace `dashboard/dist` with the new build. For a visible diagnostic launch or to start
+a specific profile, use `start-control.bat` with `--port 22367` or `--run profile-name` as needed.
+Press Ctrl+C in a visible launcher window for a graceful shutdown. For a manual hidden launch,
+stop any running profiles from the dashboard before ending the server in Task Manager. Closing the browser leaves the
 worker running. The headless server honors the ALAS deploy password and startup profiles.
 The API uses the password as a bearer token when configured. The launcher always binds to
 127.0.0.1. Use `gui.py` if you need PyWebIO or its updater.
@@ -28,7 +26,7 @@ The API uses the password as a bearer token when configured. The launcher always
 ## Optional Windows startup task
 
 In the Windows user session that runs MuMu, run these commands from the installed ALAS folder.
-Registration installs a logon trigger, retry on failure and an ignore-new policy. The first
+Registration uses the hidden launcher with a logon trigger, retry on failure and an ignore-new policy. The first
 run starts at the next login. To start sooner, use Run in Task Scheduler.
 
 ```powershell
