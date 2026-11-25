@@ -257,3 +257,4 @@ console.bat
 
 # Pylance configuration file
 pyrightconfig.json
+.mcp-backups/
