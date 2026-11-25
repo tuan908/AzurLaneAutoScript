@@ -2,11 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { ApiError, api, type ConfigField, type ConfigValue } from "../../api/client";
 import { changeDraft, draftValue, type Draft } from "./config-draft";
-import { queries } from "../../api/queries";
+import { tasksQuery } from "../scheduler/queries";
+import { configQuery } from "./queries";
 
 export function useConfigEditor(id: string) {
   const qc = useQueryClient();
-  const doc = useQuery(queries.config(id));
+  const doc = useQuery(configQuery(id));
   const [draft, setDraft] = useState<Draft | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
@@ -18,8 +19,8 @@ export function useConfigEditor(id: string) {
     onSuccess: async (result) => {
       // Do not let a new draft begin against the previous revision.
       await Promise.all([
-        qc.invalidateQueries({ queryKey: queries.config(id).queryKey }),
-        qc.invalidateQueries({ queryKey: queries.tasks(id).queryKey }),
+        qc.invalidateQueries({ queryKey: configQuery(id).queryKey }),
+        qc.invalidateQueries({ queryKey: tasksQuery(id).queryKey }),
       ]);
       setDraft(null);
       setErrors({});

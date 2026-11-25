@@ -1,6 +1,6 @@
 import { Input } from "@ui-sdk/react/input";
 import { Dialog, DialogBackdrop, DialogContent, DialogDescription, DialogTitle } from "@ui-sdk/react/dialog";
-import { Button } from "../../shared/ui/ui";
+import { Button } from "../../shared/ui/button";
 import { Select } from "../../shared/ui/select";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";

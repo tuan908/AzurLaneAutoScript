@@ -5,7 +5,8 @@ import { getRouteApi } from "@tanstack/react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLogs } from "./log-store";
-import { Button, Icon } from "../../shared/ui/ui";
+import { Button } from "../../shared/ui/button";
+import { Icon } from "../../shared/ui/icon";
 import { logTone, severity } from "./log-severity";
 
 const logLevels = [

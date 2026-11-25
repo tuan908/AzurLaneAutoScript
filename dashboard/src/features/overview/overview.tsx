@@ -1,10 +1,12 @@
-import { Button, Card, Metric } from "../../shared/ui/ui";
+import { Button } from "../../shared/ui/button";
+import { Card } from "../../shared/ui/card";
+import { Metric } from "../../shared/ui/metric";
 import type { InstanceStatus } from "../../api/client";
 import { useQuery } from "@tanstack/react-query";
 import { QueryContent } from "../../shared/ui/query-content";
-import { useDashboardRoute } from "../../app/navigation";
-import { useNow } from "../../shared/hooks";
-import { queries } from "../../api/queries";
+import { useDashboardRoute } from "../instances/navigation";
+import { useNow } from "../../shared/use-now";
+import { tasksQuery } from "../scheduler/queries";
 import { healthTone, since } from "../instances/status";
 import { QueueList } from "../scheduler/queue-list";
 import { LogPeek } from "../logs/log-preview";
@@ -13,7 +15,7 @@ import { useWorkspaceStatus } from "../instances/workspace";
 export function Overview() {
   const status = useWorkspaceStatus();
   const { go } = useDashboardRoute();
-  const tasks = useQuery(queries.tasks(status.id));
+  const tasks = useQuery(tasksQuery(status.id));
   const health = status.health;
   const policy = health?.recovery.policy;
   return (

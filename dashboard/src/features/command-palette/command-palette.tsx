@@ -13,13 +13,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import type { InstanceStatus } from "../../api/client";
-import type { Theme } from "../../shared/hooks";
+import { THEMES, type Theme } from "../../shared/theme";
 import { readLang } from "../settings/lang";
-import { TAB_LABELS, TABS, useDashboardRoute, type Tab } from "../../app/navigation";
-import { queries, useInstances } from "../../api/queries";
+import { TAB_LABELS, TABS, useDashboardRoute, type Tab } from "../instances/navigation";
+import { useInstances } from "../instances/queries";
+import { configSchemaQuery } from "../settings/queries";
 import { healthTone } from "../instances/status";
 import { useInstanceCommand } from "../instances/use-instance-command";
-import { toneDot } from "../../shared/ui/ui";
+import { toneDot } from "../../shared/ui/status-badge";
 
 const itemClass =
   "flex! h-auto! min-h-9 w-full items-center gap-2.5 rounded-alas-sm! border-0! bg-transparent! px-2.5 py-1.5 text-left text-[13px] text-ink data-highlighted:bg-accent-soft! data-highlighted:text-accent!";
@@ -32,7 +33,7 @@ export function CommandPalette({ theme, onTheme }: { theme: Theme; onTheme: (t: 
   const navigate = useNavigate();
   const instances = useInstances().data ?? [];
   const current = instances.find((i) => i.id === instanceId);
-  const schema = useQuery({ ...queries.configSchema(current?.id ?? "", readLang()), enabled: open && current !== undefined });
+  const schema = useQuery({ ...configSchemaQuery(current?.id ?? "", readLang()), enabled: open && current !== undefined });
   const settingTasks = schema.data?.menus.flatMap((menu) => menu.tasks.map((task) => ({ menu: menu.name, task }))) ?? [];
 
   const openSettings = (search: { q: string; task: string }) => {
@@ -106,7 +107,7 @@ export function CommandPalette({ theme, onTheme }: { theme: Theme; onTheme: (t: 
             <CommandSeparator className="my-1 border-t border-edge" />
             <CommandGroup>
               <CommandGroupLabel className={groupLabelClass}>Appearance</CommandGroupLabel>
-              {(["system", "light", "dark"] as Theme[]).filter((t) => t !== theme).map((t) => (
+              {THEMES.filter((t) => t !== theme).map((t) => (
                 <CommandItem key={t} value={`theme:${t}`} keywords={["theme", "appearance"]} className={itemClass}>
                   {t === "system" ? "Use the system theme" : t === "light" ? "Switch to light theme" : "Switch to dark theme"}
                 </CommandItem>

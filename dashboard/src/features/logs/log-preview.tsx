@@ -1,4 +1,4 @@
-import { Button } from "../../shared/ui/ui";
+import { Button } from "../../shared/ui/button";
 import { useEffect, useRef } from "react";
 import { useLogs } from "./log-store";
 import { logTone, severity } from "./log-severity";

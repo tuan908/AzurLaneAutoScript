@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-router";
 import { App } from "./app";
 import { Workspace } from "../features/instances/workspace";
-import { useInstances } from "../api/queries";
+import { useInstances } from "../features/instances/queries";
 
 function RouteNotFound() {
   return (

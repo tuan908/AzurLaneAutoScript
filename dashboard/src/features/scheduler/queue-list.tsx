@@ -1,6 +1,6 @@
 import type { Task } from "../../api/client";
 import { untilNextRun } from "../instances/status";
-import { useNow } from "../../shared/hooks";
+import { useNow } from "../../shared/use-now";
 export function QueueList({ items, runningNow, empty }: { items: Task[]; runningNow?: Task[]; empty: string }) {
   const now = useNow(items.some((task) => task.nextRun) ? 1000 : null);
   if (!items.length && !runningNow?.length) return <div className="py-4.5 text-center text-[13px] text-subtle">{empty}</div>;

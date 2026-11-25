@@ -8,6 +8,7 @@ export type LogLine = Schemas["LogLine"];
 export type ConfigValue = Schemas["ConfigField"]["default"];
 export type ConfigField = Schemas["ConfigField"];
 export type ConfigTask = Schemas["ConfigTask"];
+export type ConfigSchema = Schemas["ConfigSchema"];
 
 export const API = "/api/v1";
 const TOKEN_KEY = "alas.token";

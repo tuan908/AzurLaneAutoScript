@@ -1,4 +1,5 @@
-import { Banner, Button } from "./ui";
+import { Banner } from "./banner";
+import { Button } from "./button";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 

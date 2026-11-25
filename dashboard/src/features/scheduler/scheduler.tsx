@@ -1,15 +1,16 @@
-import { Card, StatusBadge } from "../../shared/ui/ui";
+import { Card } from "../../shared/ui/card";
+import { StatusBadge } from "../../shared/ui/status-badge";
 import { recentCompletions } from "./completions";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useWorkspaceStatus } from "../instances/workspace";
 import { useLogs } from "../logs/log-store";
-import { queries } from "../../api/queries";
+import { tasksQuery } from "./queries";
 import { QueueList } from "./queue-list";
 import { QueryContent } from "../../shared/ui/query-content";
 export function Scheduler() {
   const status = useWorkspaceStatus();
-  const tasks = useQuery(queries.tasks(status.id));
+  const tasks = useQuery(tasksQuery(status.id));
   const lines = useLogs(status.id);
   const history = useMemo(() => recentCompletions(lines), [lines]);
   return (

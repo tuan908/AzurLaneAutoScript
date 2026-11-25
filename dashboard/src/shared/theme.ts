@@ -1,15 +1,7 @@
 import { useEffect, useState } from "react";
-export function useNow(intervalMs: number | null = 1000) {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    if (intervalMs === null) return undefined;
-    const t = window.setInterval(() => setNow(Date.now()), intervalMs);
-    return () => window.clearInterval(t);
-  }, [intervalMs]);
-  return now;
-}
 
-export type Theme = "system" | "light" | "dark";
+export const THEMES = ["system", "light", "dark"] as const;
+export type Theme = (typeof THEMES)[number];
 const THEME_KEY = "alas.theme";
 
 export function useTheme(): [Theme, (t: Theme) => void] {
