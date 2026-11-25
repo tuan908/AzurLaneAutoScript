@@ -1,0 +1,18 @@
+# Test-only dependencies of tests/control (the ALAS control plane).
+#
+# Run from the repository root:
+#   uv run --no-project --python 3.8 --with-requirements tests/control/requirements-test.txt -m pytest tests/control -q
+#
+# Keep this list minimal. Never add numpy, cnocr, mxnet, adbutils or any other
+# heavy runtime dependency here: control tests use fake workers and fake
+# process objects instead.
+#
+# pytest 7.4.x is the last line that runs on both Python 3.7 (runtime) and 3.8
+# (the uv test interpreter), and it supports the `pythonpath` and
+# `tmp_path_retention_*` options set in pyproject.toml.
+pytest==7.4.4
+# tests/conftest.py registers the module.testing.screenshot plugin for the whole
+# suite, and that plugin imports PIL. Same version as requirements.txt.
+pillow==8.3.2
+# Used by dev_tools/soak_probe.py (P0.1). Same version as requirements.txt.
+psutil==5.9.3
