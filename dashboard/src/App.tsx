@@ -3,17 +3,25 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api, setToken, type InstanceStatus, type Task } from "./api";
 import { connectEvents, useConnection } from "./events";
 import { useLogs } from "./logStore";
+import { Settings } from "./Settings";
 
-function useSelected(ids: string[]): [string | null, (id: string) => void] {
-  const read = () => decodeURIComponent(window.location.hash.replace(/^#\/?/, "")) || null;
-  const [selected, setSelected] = useState<string | null>(read);
+type Tab = "overview" | "settings";
+
+/** Location is #/<instance>/<tab> */
+function useRoute(ids: string[]): [string | null, Tab, (id: string, tab?: Tab) => void] {
+  const read = (): [string | null, Tab] => {
+    const [id, tab] = window.location.hash.replace(/^#\/?/, "").split("/");
+    return [id ? decodeURIComponent(id) : null, tab === "settings" ? "settings" : "overview"];
+  };
+  const [route, setRoute] = useState(read);
   useEffect(() => {
-    const onHash = () => setSelected(read());
+    const onHash = () => setRoute(read());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
+  const [selected, tab] = route;
   const effective = selected && ids.includes(selected) ? selected : (ids[0] ?? null);
-  return [effective, (id) => (window.location.hash = `/${encodeURIComponent(id)}`)];
+  return [effective, tab, (id, next = "overview") => (window.location.hash = `/${encodeURIComponent(id)}/${next}`)];
 }
 
 function formatDuration(seconds: number): string {
@@ -191,7 +199,7 @@ function Logs({ id }: { id: string }) {
   );
 }
 
-function InstancePanel({ status }: { status: InstanceStatus }) {
+function InstancePanel({ status, tab, onTab }: { status: InstanceStatus; tab: Tab; onTab: (tab: Tab) => void }) {
   useNow(1000);
   const qc = useQueryClient();
   const tasks = useQuery({ queryKey: ["tasks", status.id], queryFn: () => api.tasks(status.id), refetchInterval: 10000 });
@@ -211,6 +219,14 @@ function InstancePanel({ status }: { status: InstanceStatus }) {
         <div className="card-head">
           <h2>{status.id}</h2>
           <StateBadge state={status.state} />
+          <div className="tabs">
+            <button className={tab === "overview" ? "" : "secondary"} onClick={() => onTab("overview")}>
+              Overview
+            </button>
+            <button className={tab === "settings" ? "" : "secondary"} onClick={() => onTab("settings")}>
+              Settings
+            </button>
+          </div>
           <div className="actions">
             {!alive && (
               <button disabled={busy} onClick={() => command.mutate("start")}>
@@ -257,6 +273,10 @@ function InstancePanel({ status }: { status: InstanceStatus }) {
         </dl>
       </section>
 
+      {tab === "settings" ? (
+        <Settings key={status.id} id={status.id} />
+      ) : (
+        <>
       <section className="card">
         <div className="card-head">
           <h3>Scheduler</h3>
@@ -270,6 +290,8 @@ function InstancePanel({ status }: { status: InstanceStatus }) {
       </section>
 
       <Logs id={status.id} />
+        </>
+      )}
     </main>
   );
 }
@@ -285,7 +307,7 @@ export function App() {
   }, [instances.error]);
 
   const list = instances.data ?? [];
-  const [selected, select] = useSelected(list.map((s) => s.id));
+  const [selected, tab, go] = useRoute(list.map((s) => s.id));
   const current = list.find((s) => s.id === selected);
 
   if (locked) {
@@ -303,9 +325,9 @@ export function App() {
     <div className="app">
       <Header />
       <div className="body">
-        <InstanceList instances={list} selected={selected} onSelect={select} />
+        <InstanceList instances={list} selected={selected} onSelect={(id) => go(id, tab)} />
         {current ? (
-          <InstancePanel status={current} />
+          <InstancePanel status={current} tab={tab} onTab={(next) => go(current.id, next)} />
         ) : (
           <main className="main">
             <div className="card muted">

@@ -17,6 +17,7 @@ import hmac
 import ipaddress
 import json
 import os
+import re
 import time
 from datetime import datetime, timezone
 from typing import Callable, Dict, Optional
@@ -28,6 +29,7 @@ from starlette.responses import JSONResponse, RedirectResponse, StreamingRespons
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
+from module.control.configuration import ConfigConflict, ConfigInvalid, ConfigService, ConfigUnsupported
 from module.control.instances import InstanceService, UnknownInstance
 
 API_PREFIX = "/api/v1"
@@ -68,8 +70,10 @@ class ControlApi:
             service: InstanceService,
             password: Optional[str] = None,
             health_details: Callable[[], Dict] = dict,
+            config: Optional[ConfigService] = None,
     ):
         self.service = service
+        self.config = config
         self.password = password or None
         self.health_details = health_details
         self.started_at = time.time()
@@ -94,17 +98,50 @@ class ControlApi:
             return _error(403, "loopback_only", "Without a password the API only accepts local requests")
         return None
 
+    @staticmethod
+    def _map_error(e: Exception) -> Optional[JSONResponse]:
+        if isinstance(e, UnknownInstance):
+            return _error(404, "unknown_instance", f"No instance named {e.args[0]!r}")
+        if isinstance(e, ConfigConflict):
+            body = {"error": {"code": "conflict", "message": "The config changed since it was read; reload it"},
+                    "revision": e.revision}
+            return JSONResponse(body, status_code=409)
+        if isinstance(e, ConfigInvalid):
+            body = {"error": {"code": "invalid", "message": "Some values are invalid; nothing was saved"},
+                    "fields": e.errors}
+            return JSONResponse(body, status_code=400)
+        if isinstance(e, ConfigUnsupported):
+            return _error(501, "unsupported", str(e))
+        if isinstance(e, ValueError):
+            return _error(400, "bad_request", str(e))
+        return None
+
     def _guarded(self, handler):
+        if asyncio.iscoroutinefunction(handler):
+            async def async_endpoint(request: Request):
+                refused = self._refuse(request)
+                if refused is not None:
+                    return refused
+                try:
+                    return await handler(request)
+                except Exception as e:
+                    mapped = self._map_error(e)
+                    if mapped is None:
+                        raise
+                    return mapped
+            return async_endpoint
+
         def endpoint(request: Request):
             refused = self._refuse(request)
             if refused is not None:
                 return refused
             try:
                 return handler(request)
-            except UnknownInstance as e:
-                return _error(404, "unknown_instance", f"No instance named {e.args[0]!r}")
-            except ValueError as e:
-                return _error(400, "bad_request", str(e))
+            except Exception as e:
+                mapped = self._map_error(e)
+                if mapped is None:
+                    raise
+                return mapped
         return endpoint
 
     # ------------------------------------------------------------ endpoints
@@ -152,6 +189,33 @@ class ControlApi:
 
     def tasks(self, request: Request) -> JSONResponse:
         return JSONResponse(self.service.tasks(request.path_params["instance_id"]))
+
+    def config_schema(self, request: Request) -> JSONResponse:
+        instance_id = request.path_params["instance_id"]
+        self.service.require(instance_id)
+        lang = request.query_params.get("lang", "en-US")
+        if not re.fullmatch(r"[a-z]{2}-[A-Z]{2}", lang):
+            raise ValueError("lang must look like en-US")
+        return JSONResponse(self.config.schema(instance_id, lang))
+
+    def config_read(self, request: Request) -> JSONResponse:
+        instance_id = request.path_params["instance_id"]
+        self.service.require(instance_id)
+        return JSONResponse(self.config.read(instance_id))
+
+    async def config_update(self, request: Request) -> JSONResponse:
+        instance_id = request.path_params["instance_id"]
+        self.service.require(instance_id)
+        if not request.headers.get("content-type", "").startswith("application/json"):
+            return _error(415, "unsupported_media_type", "Send Content-Type: application/json")
+        try:
+            body = await request.json()
+        except Exception:
+            raise ValueError("Body is not valid JSON")
+        if not isinstance(body, dict) or not isinstance(body.get("revision"), str):
+            raise ValueError('Body must be {"revision": "...", "changes": {"Task.Group.Arg": value}}')
+        result = await run_in_threadpool(self.config.update, instance_id, body["revision"], body.get("changes"))
+        return JSONResponse(result)
 
     async def events(self, request: Request):
         """
@@ -218,7 +282,11 @@ class ControlApi:
             Route("/instances/{instance_id}/logs", g(self.logs), methods=["GET"]),
             Route("/instances/{instance_id}/tasks", g(self.tasks), methods=["GET"]),
             Route("/events", self.events, methods=["GET"]),
-        ]
+        ] + ([
+            Route("/instances/{instance_id}/config/schema", g(self.config_schema), methods=["GET"]),
+            Route("/instances/{instance_id}/config", g(self.config_read), methods=["GET"]),
+            Route("/instances/{instance_id}/config", g(self.config_update), methods=["PATCH"]),
+        ] if self.config is not None else [])
 
     def mount(self) -> Mount:
         return Mount(API_PREFIX, routes=self.routes())

@@ -1556,6 +1556,7 @@ def app():
 
     # Control plane API at /api/v1, sharing ProcessManager with the GUI above
     from module.control.api import ControlApi, mount_control_api
+    from module.control.configuration import ConfigService
     from module.control.instances import InstanceService
     mount_control_api(app, ControlApi(
         InstanceService(
@@ -1567,9 +1568,30 @@ def app():
         ),
         password=key,
         health_details=lambda: {"logQueueManagerAlive": _log_queue_manager_alive()},
+        config=ConfigService(
+            config_mod=get_config_mod,
+            args=lambda name: read_file(filepath_args("args", get_config_mod(name))),
+            menu=lambda name: read_file(filepath_args("menu", get_config_mod(name))),
+            i18n=_instance_i18n,
+            read_raw=_read_config_bytes,
+            read_config=State.config_updater.read_file,
+            write_config=lambda name, data: State.config_updater.write_file(name, data),
+            save_callback=State.config_updater.save_callback,
+        ),
     ), dashboard_dir=os.path.abspath("./dashboard/dist"))
 
     return app
+
+
+def _instance_i18n(config_name: str, lang: str) -> dict:
+    from module.config.utils import filepath_i18n
+    path = filepath_i18n(lang, get_config_mod(config_name))
+    return read_file(path) if os.path.exists(path) else {}
+
+
+def _read_config_bytes(config_name: str) -> bytes:
+    with open(filepath_config(config_name), "rb") as f:
+        return f.read()
 
 
 def _instance_tasks(config_name: str) -> dict:

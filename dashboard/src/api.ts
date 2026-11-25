@@ -45,6 +45,45 @@ export interface LogChunk {
   lastSeq: number;
 }
 
+export type FieldType = "input" | "select" | "checkbox" | "datetime" | "textarea" | "lock" | "state";
+export type ConfigValue = string | number | boolean | null;
+
+export interface ConfigField {
+  path: string;
+  type: FieldType;
+  label: string;
+  help: string;
+  default: ConfigValue;
+  readOnly: boolean;
+  options?: { value: ConfigValue; label: string }[];
+  validate?: string;
+  valuetype?: string;
+}
+
+export interface ConfigGroup {
+  id: string;
+  name: string;
+  help: string;
+  fields: ConfigField[];
+}
+
+export interface ConfigTask {
+  id: string;
+  name: string;
+  help: string;
+  groups: ConfigGroup[];
+}
+
+export interface ConfigSchema {
+  lang: string;
+  menus: { id: string; name: string; tasks: ConfigTask[] }[];
+}
+
+export interface ConfigDoc {
+  revision: string;
+  config: Record<string, unknown>;
+}
+
 export const API = "/api/v1";
 const TOKEN_KEY = "alas.token";
 
@@ -53,6 +92,7 @@ export class ApiError extends Error {
     public status: number,
     public code: string,
     message: string,
+    public body: Record<string, unknown> = {},
   ) {
     super(message);
   }
@@ -81,16 +121,19 @@ function currentToken() {
   return getToken() || memoryToken;
 }
 
-async function request<T>(path: string, method: "GET" | "POST" = "GET"): Promise<T> {
+async function request<T>(path: string, method: "GET" | "POST" | "PATCH" = "GET", json?: unknown): Promise<T> {
   const token = currentToken();
+  const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+  if (json !== undefined) headers["Content-Type"] = "application/json";
   const res = await fetch(API + path, {
     method,
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers,
+    body: json === undefined ? undefined : JSON.stringify(json),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = (body as { error?: { code: string; message: string } }).error;
-    throw new ApiError(res.status, err?.code ?? "http_error", err?.message ?? res.statusText);
+    throw new ApiError(res.status, err?.code ?? "http_error", err?.message ?? res.statusText, body);
   }
   return body as T;
 }
@@ -104,6 +147,15 @@ export const api = {
     request<LogChunk>(`/instances/${encodeURIComponent(id)}/logs?after=${after}&limit=${limit}`),
   command: (id: string, action: "start" | "stop" | "restart") =>
     request<InstanceStatus>(`/instances/${encodeURIComponent(id)}/${action}`, "POST"),
+  configSchema: (id: string, lang: string) =>
+    request<ConfigSchema>(`/instances/${encodeURIComponent(id)}/config/schema?lang=${encodeURIComponent(lang)}`),
+  config: (id: string) => request<ConfigDoc>(`/instances/${encodeURIComponent(id)}/config`),
+  updateConfig: (id: string, revision: string, changes: Record<string, ConfigValue>) =>
+    request<{ revision: string; applied: Record<string, ConfigValue> }>(
+      `/instances/${encodeURIComponent(id)}/config`,
+      "PATCH",
+      { revision, changes },
+    ),
 };
 
 export function eventsUrl(): string {

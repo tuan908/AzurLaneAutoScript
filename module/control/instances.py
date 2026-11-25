@@ -41,6 +41,11 @@ class InstanceService:
             raise UnknownInstance(instance_id)
         return self._get_manager(instance_id)
 
+    def require(self, instance_id: str) -> None:
+        """Raises UnknownInstance if instance_id is not a configured instance"""
+        if instance_id not in set(self._list_instances()):
+            raise UnknownInstance(instance_id)
+
     def list_instances(self) -> List[dict]:
         return [self._get_manager(name).status() for name in self._list_instances()]
 
