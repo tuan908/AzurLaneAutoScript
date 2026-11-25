@@ -62,7 +62,7 @@ export function CommandPalette({ theme, onTheme }: { theme: Theme; onTheme: (t: 
       <DialogBackdrop className="fixed inset-0 z-40 bg-black/35 backdrop-blur-[2px]" />
       <DialogContent className="fixed! top-[12vh]! left-1/2! z-50 m-0! w-[min(600px,calc(100vw-24px))]! max-w-none! -translate-x-1/2 overflow-hidden rounded-xl! border! border-edge-strong! bg-panel! p-0! text-ink shadow-alas-lg">
         <DialogTitle className="sr-only">Command palette</DialogTitle>
-        <Command onAction={run} query={query} onQueryChange={setQuery} loop
+        <Command onAction={run} query={query} onQueryChange={setQuery} loop filter="contains"
           className="flex! w-full! max-w-none! flex-col rounded-none! border-0! bg-transparent! shadow-none!">
           <div className="flex items-center gap-2.5 border-b border-edge px-3.5">
             <svg className="size-4 shrink-0 text-subtle" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><circle cx="7" cy="7" r="4.5" /><path d="m10.5 10.5 3 3" /></svg>
@@ -71,14 +71,6 @@ export function CommandPalette({ theme, onTheme }: { theme: Theme; onTheme: (t: 
           </div>
           <CommandEmpty className="px-4 py-6 text-center text-[13px] text-subtle [&:not([data-empty])]:hidden">Nothing matches.</CommandEmpty>
           <CommandList className="max-h-[min(60vh,440px)] overflow-y-auto p-1.5">
-            {current && query.trim() && (
-              <CommandGroup>
-                <CommandGroupLabel className={groupLabelClass}>Settings of {current.id}</CommandGroupLabel>
-                <CommandItem value="search:settings" keywords={[query]} className={itemClass}>
-                  <span>Search settings for “{query.trim()}”</span>
-                </CommandItem>
-              </CommandGroup>
-            )}
             <CommandGroup>
               <CommandGroupLabel className={groupLabelClass}>Instances</CommandGroupLabel>
               {instances.map((instance) => <InstanceItem key={instance.id} instance={instance} />)}
@@ -120,6 +112,17 @@ export function CommandPalette({ theme, onTheme }: { theme: Theme; onTheme: (t: 
                 </CommandItem>
               ))}
             </CommandGroup>
+            {current && query.trim() && (
+              <>
+              <CommandSeparator className="my-1 border-t border-edge" />
+              <CommandGroup>
+                <CommandGroupLabel className={groupLabelClass}>Settings of {current.id}</CommandGroupLabel>
+                <CommandItem value="search:settings" keywords={[query]} className={itemClass}>
+                  <span>Search settings for “{query.trim()}”</span>
+                </CommandItem>
+              </CommandGroup>
+              </>
+            )}
           </CommandList>
         </Command>
       </DialogContent>
