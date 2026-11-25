@@ -1,9 +1,12 @@
 import argparse
 import os
 import queue
+import re
 import threading
+import time
+from datetime import datetime, timezone
 from multiprocessing import Process
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 import inflection
 from rich.console import Console, ConsoleRenderable
@@ -22,8 +25,22 @@ from module.submodule.utils import get_available_func, get_available_mod, get_av
 from module.webui.setting import State
 
 
+_TASK_START = re.compile(r"Scheduler: Start task `([^`]+)`")
+_TASK_END = "Scheduler: End task"
+
+
+def _iso(timestamp: Optional[float]) -> Optional[str]:
+    if timestamp is None:
+        return None
+    return datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
+
+
 class ProcessManager:
     _processes: Dict[str, "ProcessManager"] = {}
+    # Guards _processes, so concurrent get_manager() calls never create two managers
+    _registry_lock = threading.Lock()
+    # Seconds to wait for a killed worker to be reaped
+    stop_join_timeout = 10.0
 
     def __init__(self, config_name: str = "alas") -> None:
         self.config_name = config_name
@@ -32,24 +49,55 @@ class ProcessManager:
         self.renderables_max_length = 400
         self.renderables_reduce_length = 80
         self._process: Process = None
-        self._process_locks: Dict[str, threading.Lock] = {}
         self.thd_log_queue_handler: threading.Thread = None
+        # Serialises start / stop / restart of this instance. Re-entrant, so restart
+        # can hold it across its stop and start.
+        self.lock = threading.RLock()
+        # "starting" or "stopping" while a lifecycle call is in progress
+        self._transition: Optional[str] = None
+        self._stop_requested = False
+        self._exit_observed = True
+        self.revision = 0
+        self.started_at: Optional[float] = None
+        self.stopped_at: Optional[float] = None
+        self.last_activity_at: Optional[float] = None
+        self.current_task: Optional[str] = None
+        self._text_console = Console(no_color=True, width=200)
 
-    def start(self, func, ev: threading.Event = None) -> None:
-        if not self.alive:
+    def start(self, func, ev: threading.Event = None) -> bool:
+        """
+        Start the worker unless it is already running.
+
+        Returns:
+            bool: If a new worker was started.
+        """
+        with self.lock:
+            if self.alive:
+                return False
             if func is None:
                 func = get_config_mod(self.config_name)
-            self._process = Process(
-                target=ProcessManager.run_process,
-                args=(
-                    self.config_name,
-                    func,
-                    self._renderable_queue,
-                    ev,
-                ),
-            )
-            self._process.start()
-            self.start_log_queue_handler()
+            self._transition = "starting"
+            try:
+                self._process = Process(
+                    target=ProcessManager.run_process,
+                    args=(
+                        self.config_name,
+                        func,
+                        self._renderable_queue,
+                        ev,
+                    ),
+                )
+                self._process.start()
+                self._stop_requested = False
+                self._exit_observed = False
+                self.started_at = time.time()
+                self.stopped_at = None
+                self.current_task = None
+                self.revision += 1
+                self.start_log_queue_handler()
+            finally:
+                self._transition = None
+            return True
 
     def start_log_queue_handler(self):
         if (
@@ -62,26 +110,60 @@ class ProcessManager:
         )
         self.thd_log_queue_handler.start()
 
-    def stop(self) -> None:
-        try:
-            lock = self._process_locks[self.config_name]
-        except KeyError:
-            lock = threading.Lock()
-            self._process_locks[self.config_name] = lock
+    def stop(self) -> bool:
+        """
+        Kill the worker and wait until it has exited.
 
-        with lock:
+        Returns:
+            bool: If no worker is running afterwards.
+        """
+        with self.lock:
             if self.alive:
-                self._process.kill()
-                self.renderables.append(
-                    f"[{self.config_name}] exited. Reason: Manual stop\n"
-                )
+                self._transition = "stopping"
+                self._stop_requested = True
+                self.revision += 1
+                try:
+                    self._process.kill()
+                    self._process.join(timeout=self.stop_join_timeout)
+                finally:
+                    self._transition = None
+                if self._process.is_alive():
+                    logger.warning(
+                        f"[{self.config_name}] still alive {self.stop_join_timeout}s after kill"
+                    )
+                else:
+                    self.renderables.append(
+                        f"[{self.config_name}] exited. Reason: Manual stop\n"
+                    )
+                    self._observe_exit()
             if self.thd_log_queue_handler is not None:
                 self.thd_log_queue_handler.join(timeout=1)
                 if self.thd_log_queue_handler.is_alive():
                     logger.warning(
                         "Log queue handler thread does not stop within 1 seconds"
                     )
+            stopped = not self.alive
         logger.info(f"[{self.config_name}] exited")
+        return stopped
+
+    def restart(self, func, ev: threading.Event = None) -> bool:
+        """
+        Stop the worker if running, then start a new one. Nothing else can start or
+        stop this instance in between.
+
+        Returns:
+            bool: If a new worker was started.
+        """
+        with self.lock:
+            if not self.stop():
+                return False
+            return self.start(func, ev)
+
+    def _observe_exit(self) -> None:
+        if not self._exit_observed:
+            self._exit_observed = True
+            self.stopped_at = time.time()
+            self.revision += 1
 
     def _thread_log_queue_handler(self) -> None:
         while self.alive:
@@ -90,9 +172,73 @@ class ProcessManager:
             except queue.Empty:
                 continue
             self.renderables.append(log)
+            self._track_activity(log)
             if len(self.renderables) > self.renderables_max_length:
                 self.renderables = self.renderables[self.renderables_reduce_length :]
         logger.info("End of log queue handler loop")
+
+    def _track_activity(self, log) -> None:
+        self.last_activity_at = time.time()
+        try:
+            if isinstance(log, str):
+                text = log
+            else:
+                with self._text_console.capture() as capture:
+                    self._text_console.print(log)
+                text = capture.get()
+        except Exception:
+            return
+        match = _TASK_START.search(text)
+        if match:
+            self.current_task = match.group(1)
+        elif _TASK_END in text:
+            self.current_task = None
+
+    def status(self) -> dict:
+        """
+        Snapshot of this instance, derived from the worker process this server owns.
+        Never blocks on a running start or stop.
+        """
+        process = self._process
+        alive = process is not None and process.is_alive()
+        if process is not None and not alive and not self._exit_observed:
+            if self.lock.acquire(blocking=False):
+                try:
+                    self._observe_exit()
+                finally:
+                    self.lock.release()
+
+        legacy_state = self.state
+        exit_code = None if process is None or alive else process.exitcode
+        last_error = None
+        if self._transition is not None:
+            state = self._transition
+        elif alive:
+            state = "running"
+        elif process is None or self._stop_requested:
+            state = "stopped"
+        elif exit_code not in (0, None):
+            state = "failed"
+            last_error = f"Worker exited with code {exit_code}"
+        elif legacy_state == 3:
+            state = "failed"
+            last_error = "Worker stopped on an error, see the log"
+        else:
+            state = "stopped"
+
+        return {
+            "id": self.config_name,
+            "state": state,
+            "processId": process.pid if alive else None,
+            "startedAt": _iso(self.started_at),
+            "stoppedAt": None if alive else _iso(self.stopped_at),
+            "exitCode": exit_code,
+            "currentTask": self.current_task if alive else None,
+            "lastActivityAt": _iso(self.last_activity_at),
+            "lastError": last_error,
+            "legacyState": legacy_state,
+            "revision": self.revision,
+        }
 
     @property
     def alive(self) -> bool:
@@ -126,9 +272,10 @@ class ProcessManager:
         """
         Create a new alas if not exists.
         """
-        if config_name not in cls._processes:
-            cls._processes[config_name] = ProcessManager(config_name)
-        return cls._processes[config_name]
+        with cls._registry_lock:
+            if config_name not in cls._processes:
+                cls._processes[config_name] = ProcessManager(config_name)
+            return cls._processes[config_name]
 
     @staticmethod
     def run_process(
