@@ -18,10 +18,10 @@ import { App } from "./app";
 
 function RouteNotFound() {
   return (
-    <main className="grid min-h-[50vh] place-content-center gap-2 text-center text-subtle">
+    <div className="grid min-h-[50vh] place-content-center gap-2 text-center text-subtle">
       <h2>Page not found</h2>
       <span>Choose a profile from the sidebar.</span>
-    </main>
+    </div>
   );
 }
 
@@ -39,10 +39,10 @@ const index = createRoute({
     return first ? (
       <Navigate to="/$instanceId/overview" params={{ instanceId: first.id }} replace />
     ) : (
-      <main className="grid min-h-[50vh] place-content-center gap-2 text-center text-subtle">
+      <div className="grid min-h-[50vh] place-content-center gap-2 text-center text-subtle">
         <h2>No instances yet</h2>
         <span>Create a profile from the sidebar to get started.</span>
-      </main>
+      </div>
     );
   },
 });
@@ -56,10 +56,10 @@ const instance = createRoute({
     const status = data?.find((profile) => profile.id === instanceId);
     if (!status) {
       return (
-        <main className="grid min-h-[50vh] place-content-center gap-2 text-center text-subtle">
+        <div className="grid min-h-[50vh] place-content-center gap-2 text-center text-subtle">
           <h2>Instance not found</h2>
           <span>Select an existing instance from the sidebar.</span>
-        </main>
+        </div>
       );
     }
     return (

@@ -15,7 +15,8 @@ export function WorkspaceBanners({
 }) {
   const { go } = useDashboardRoute();
   const h = status.health;
-  const now = useNow(h?.state === "crashed" && h.recovery.nextAttemptAt ? 1000 : null);
+  const nextRetry = h?.state === "crashed" && !h.recovery.gaveUp ? h.recovery.nextAttemptAt : null;
+  const now = useNow(nextRetry ? 1000 : null);
   const toLogs = { label: "Open logs", tab: "logs" as const };
   const toHealth = { label: "Recovery settings", tab: "health" as const };
   const items: {
@@ -23,6 +24,7 @@ export function WorkspaceBanners({
     title: string;
     body: string;
     links?: { label: string; tab: Tab }[];
+    announce?: boolean;
   }[] = [];
   if (commandError)
     items.push({
@@ -50,11 +52,12 @@ export function WorkspaceBanners({
       body: "Too many restarts within an hour. Start it manually once the cause is fixed.",
       links: [toLogs, toHealth],
     });
-  else if (h?.state === "crashed" && h.recovery.nextAttemptAt)
+  else if (h && nextRetry)
     items.push({
       tone: "warn",
       title: "Crashed — restarting automatically",
-      body: `Next attempt ${untilNextRun(h.recovery.nextAttemptAt, now)}. ${h.detail}`,
+      body: `Next attempt ${untilNextRun(nextRetry, now)}. ${h.detail}`,
+      announce: false,
     });
   else if (h?.state === "stalled")
     items.push({
@@ -72,11 +75,15 @@ export function WorkspaceBanners({
     });
   return (
     <>
+      <span className="sr-only" role="status">
+        {nextRetry ? "Worker crashed. Automatic recovery is scheduled." : ""}
+      </span>
       {items.map((b) => (
         <Banner
           key={b.title}
           tone={b.tone}
           heading={b.title}
+          announce={b.announce ?? true}
           action={b.links?.map((link) => (
             <Button key={link.tab} size="small" onClick={() => go(status.id, link.tab)}>
               {link.label}

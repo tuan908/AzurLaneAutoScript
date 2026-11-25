@@ -115,7 +115,7 @@ export function CommandPalette({ theme, onTheme }: { theme: Theme; onTheme: (t: 
           filter="contains"
           className="flex! w-full! max-w-none! flex-col rounded-none! border-0! bg-transparent! shadow-none!"
         >
-          <div className="flex items-center gap-2.5 border-b border-edge px-3.5">
+          <div className="flex items-center gap-2.5 border-b border-edge px-3.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-accent">
             <svg
               className="size-4 shrink-0 text-subtle"
               viewBox="0 0 16 16"

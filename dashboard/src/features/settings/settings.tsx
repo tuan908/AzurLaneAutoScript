@@ -87,7 +87,7 @@ export function Settings() {
           onTask={(next) => void navigate({ search: { q: "", task: next } })}
         />
 
-        <section className="flex min-w-0 flex-col gap-4 pb-18">
+        <section className="flex min-w-0 flex-col gap-4">
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
             <h2 className="text-lg">
               {searchHits
@@ -110,6 +110,9 @@ export function Settings() {
           {!searchHits && current?.help && <SettingHelp text={current.help} about={current.name} />}
 
           <SaveBar editor={editor} saveBlocked={schema.isError} />
+          <p className={editor.notice ? "text-[13px] text-ok" : "sr-only"} role="status">
+            {editor.notice}
+          </p>
 
           {searchHits ? (
             <Card className="[&_h3]:mb-0.5">

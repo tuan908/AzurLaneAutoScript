@@ -27,6 +27,11 @@ export function SettingField({
   onChange: (v: ConfigValue) => void;
 }) {
   const id = `f-${field.path}`;
+  const errorId = `${id}-error`;
+  const validation = {
+    "aria-invalid": error ? (true as const) : undefined,
+    "aria-describedby": error ? errorId : undefined,
+  };
   let control;
   if (field.readOnly) {
     control = (
@@ -37,6 +42,7 @@ export function SettingField({
   } else if (field.type === "checkbox") {
     control = (
       <Switch
+        {...validation}
         disabled={disabled}
         id={id}
         aria-label={`${field.label} ${field.path}`}
@@ -51,6 +57,7 @@ export function SettingField({
     const known = options.some((o) => String(o.value) === String(value));
     control = (
       <Select
+        {...validation}
         id={id}
         label={`${field.label} ${field.path}`}
         disabled={disabled}
@@ -68,6 +75,7 @@ export function SettingField({
   } else if (field.type === "datetime") {
     control = (
       <Input
+        {...validation}
         disabled={disabled}
         id={id}
         type="datetime-local"
@@ -79,6 +87,7 @@ export function SettingField({
   } else if (field.type === "textarea") {
     control = (
       <Textarea
+        {...validation}
         disabled={disabled}
         id={id}
         rows={4}
@@ -89,6 +98,7 @@ export function SettingField({
   } else {
     control = (
       <Input
+        {...validation}
         disabled={disabled}
         id={id}
         type="text"
@@ -110,7 +120,11 @@ export function SettingField({
       <div className="flex min-w-0 items-center [&_[data-slot=select-trigger]]:w-full">
         {control}
       </div>
-      {error && <div className="col-span-full text-xs text-bad">{error}</div>}
+      {error && (
+        <div id={errorId} className="col-span-full text-xs text-bad">
+          {error}
+        </div>
+      )}
       {field.help && (
         <SettingHelp className="col-span-full" text={field.help} about={field.label} />
       )}

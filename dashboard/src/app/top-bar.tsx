@@ -34,6 +34,13 @@ export function TopBar({ theme, onTheme }: { theme: Theme; onTheme: (t: Theme) =
               ? "Connecting"
               : "Reconnecting"}
         </Chip>
+        <span className="sr-only" role="status">
+          {connectionError
+            ? "Live updates interrupted. Reconnecting."
+            : connection === "open"
+              ? "Live updates connected."
+              : ""}
+        </span>
         {overall && (
           <Chip tone={HEALTH_TONE[overall]}>
             Health <strong>{HEALTH_LABEL[overall]}</strong>

@@ -31,7 +31,7 @@ export function Workspace({ status, children }: { status: InstanceStatus; childr
   const tone = healthTone(status);
 
   return (
-    <main className="flex min-h-0 min-w-0 flex-col min-[861px]:overflow-y-auto">
+    <>
       <div className="sticky top-0 z-5 border-b border-edge bg-canvas/90 px-4 pt-4.5 backdrop-blur-md min-[861px]:px-6">
         <div className="flex flex-wrap items-center gap-3 [&_h2]:min-w-0 [&_h2]:wrap-anywhere">
           <h2>{status.id}</h2>
@@ -86,7 +86,7 @@ export function Workspace({ status, children }: { status: InstanceStatus; childr
         <WorkspaceBanners status={status} commandError={command.error} />
         <WorkspaceStatus value={status}>{children}</WorkspaceStatus>
       </div>
-    </main>
+    </>
   );
 }
 

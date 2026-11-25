@@ -13,6 +13,8 @@ export function Select({
   id,
   label,
   className,
+  "aria-invalid": invalid,
+  "aria-describedby": describedBy,
 }: {
   items: readonly (string | { value: string; label: string })[];
   value: string;
@@ -21,6 +23,8 @@ export function Select({
   id?: string;
   label?: string;
   className?: string;
+  "aria-invalid"?: true | undefined;
+  "aria-describedby"?: string | undefined;
 }) {
   return (
     <SdkSelect
@@ -31,7 +35,13 @@ export function Select({
         if (next !== null) onValueChange(next);
       }}
     >
-      <SelectTrigger id={id} aria-label={label} {...(className ? { className } : {})}>
+      <SelectTrigger
+        id={id}
+        aria-label={label}
+        aria-invalid={invalid}
+        aria-describedby={describedBy}
+        {...(className ? { className } : {})}
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent />

@@ -1,9 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Outlet } from "@tanstack/react-router";
 import { Toast, ToastClose, ToastDescription, ToastRegion, ToastTitle } from "@ui-sdk/react/toast";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { ApiError } from "@/api/client";
+import { ApiError, setToken } from "@/api/client";
 import { InstanceRail } from "@/features/instances/instance-rail";
 import { useDashboardRoute } from "@/features/instances/navigation";
 import { useInstances } from "@/features/instances/queries";
@@ -17,23 +17,50 @@ import { TopBar } from "./top-bar";
 export function App() {
   const qc = useQueryClient();
   const [theme, setTheme] = useTheme();
+  const [signInOpen, setSignInOpen] = useState(false);
+  const mainContent = useRef<HTMLElement>(null);
   const instances = useInstances();
   const locked = instances.error instanceof ApiError && instances.error.status === 401;
 
   const ready = instances.data !== undefined;
   useEffect(() => {
-    return ready && !locked ? connectEvents(qc) : undefined;
-  }, [qc, ready, locked]);
+    return ready && !locked && !signInOpen ? connectEvents(qc) : undefined;
+  }, [qc, ready, locked, signInOpen]);
 
   const list = instances.data ?? [];
   const { instanceId, tab, go } = useDashboardRoute();
 
-  if (locked) {
-    return <Login onDone={() => void instances.refetch()} />;
+  if (locked || signInOpen) {
+    return (
+      <Login
+        onUnlock={async (password) => {
+          setSignInOpen(true);
+          setToken(password);
+          const result = await instances.refetch();
+          if (result.error instanceof ApiError && result.error.status === 401) {
+            return "The server rejected this password. Check it and try again.";
+          }
+          if (result.error) return "Could not unlock the dashboard. Try again.";
+          setSignInOpen(false);
+          return null;
+        }}
+      />
+    );
   }
 
   return (
     <div className="grid h-auto min-h-full grid-cols-1 grid-rows-[auto_auto_minmax(0,1fr)] min-[861px]:h-full min-[861px]:grid-cols-[272px_minmax(0,1fr)] min-[861px]:grid-rows-[auto_minmax(0,1fr)]">
+      <a
+        href="#dashboard-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-alas-sm focus:bg-panel focus:px-3 focus:py-2 focus:text-ink"
+        onClick={(event) => {
+          // The dashboard uses the URL hash for routing.
+          event.preventDefault();
+          mainContent.current?.focus();
+        }}
+      >
+        Skip to main content
+      </a>
       <TopBar theme={theme} onTheme={setTheme} />
       <InstanceRail
         instances={list}
@@ -53,10 +80,15 @@ export function App() {
           </Toast>
         )}
       </ToastRegion>
-      {ready ? (
-        <Outlet />
-      ) : (
-        <main className="flex min-h-0 min-w-0 flex-col min-[861px]:overflow-y-auto">
+      <main
+        ref={mainContent}
+        id="dashboard-content"
+        tabIndex={-1}
+        className="flex min-h-0 min-w-0 flex-col focus-visible:-outline-offset-2 min-[861px]:overflow-y-auto"
+      >
+        {ready ? (
+          <Outlet />
+        ) : (
           <div className="grid min-h-[50vh] place-content-center place-items-center gap-2 text-center text-subtle">
             {instances.isLoading ? (
               <span>Loading instances…</span>
@@ -67,8 +99,8 @@ export function App() {
               </>
             ) : null}
           </div>
-        </main>
-      )}
+        )}
+      </main>
     </div>
   );
 }
