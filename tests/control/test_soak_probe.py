@@ -77,8 +77,8 @@ class PosixProc(FakeProc):
         return 17
 
 
-def snap(pid, ppid=None, name='python.exe', cmdline=None, create_time=1000.0, listen=(), files=()):
-    return make_snapshot(pid, ppid, name, cmdline or ['python.exe'], create_time, listen, files)
+def snap(pid, ppid=None, name='python.exe', cmdline=None, create_time=1000.0, listen=(), files=(), status=''):
+    return make_snapshot(pid, ppid, name, cmdline or ['python.exe'], create_time, listen, files, status)
 
 
 def spawn_cmd():
@@ -718,7 +718,7 @@ class FakePsProc(WindowsProc):
         super().__init__(**kwargs)
         self.pid = s.pid
         self.info = {'pid': s.pid, 'ppid': s.ppid, 'name': s.name, 'cmdline': s.cmdline,
-                     'create_time': s.create_time}
+                     'create_time': s.create_time, 'status': s.status or 'running'}
         self._listen = s.listen_ports
 
     def connections(self, kind='inet'):
@@ -1006,3 +1006,316 @@ def test_main_unwritable_output_exits_1(tmp_path):
     code = soak_probe.main(['--once', '--out', str(blocker / 'soak.csv'), '--alas-root', str(tmp_path),
                             '--http-timeout', '1', '--url', 'http://127.0.0.1:{}/'.format(closed_port())])
     assert code == 1
+
+
+# ---------------------------------------------------------------- orphans after server exit
+
+def test_server_exit_keeps_orphans_and_launcher():
+    memory = soak_probe.RoleMemory()
+    classify(reload_tree(), 22267, memory=memory)
+    # Server 101 exits; its children keep ppid=101 (Windows) and leave the tree
+    without_server = [s for s in reload_tree() if s.pid != 101]
+    roles = classify(without_server, 22267, memory=memory)
+    assert roles[100] == ('gui_launcher', '', 100)
+    assert roles[102] == ('sync_manager', '', 100)
+    assert roles[103] == ('worker', 'alas', 100)
+    assert roles[104] == ('worker', 'alas2', 100)
+    assert roles[105] == ('unknown', '', 100)
+    assert memory.orphans == {102, 103, 104, 105}
+    counts = dict(kv.split('=') for kv in soak_probe.format_counts(roles, memory.orphans).split(';'))
+    assert counts['server'] == '0'
+    assert counts['sync_manager'] == '1'
+    assert counts['worker'] == '2'
+    assert counts['orphan'] == '4'
+
+    # Linux: orphans are re-parented to init, same answer
+    reparented = [s._replace(ppid=1) if s.pid in (102, 103, 104, 105) else s for s in without_server]
+    roles = classify(reparented, 22267, memory=memory)
+    assert roles[103] == ('worker', 'alas', 100)
+    assert roles[100][0] == 'gui_launcher'
+
+    # Reload: the launcher starts a new server, old processes stay orphans
+    restarted = without_server + [snap(201, 100, 'python.exe', spawn_cmd(), 2000.0, listen=[22267])]
+    roles = classify(restarted, 22267, memory=memory)
+    assert roles[201] == ('server', '', 100)
+    assert roles[103] == ('worker', 'alas', 100)
+    assert 103 in memory.orphans
+    assert 201 not in memory.orphans
+
+
+def test_orphans_forgotten_when_they_exit():
+    memory = soak_probe.RoleMemory()
+    classify(reload_tree(), 22267, memory=memory)
+    roles = classify([s for s in reload_tree() if s.pid not in (101, 103)], 22267, memory=memory)
+    assert 103 not in roles
+    assert (103, 1010.0) not in memory.roles
+    assert (100, 1000.0) in memory.tree_servers
+
+
+def test_sampler_marks_orphan_rows(tmp_path):
+    snaps = reload_tree()
+    sampler, _ = sampler_for(snaps, tmp_path)
+    sampler.take_sample(1, datetime.now())
+    sampler.ps.snaps = [s for s in snaps if s.pid != 101]
+    rows = sampler.take_sample(2, datetime.now())
+    by_pid = {r['pid']: r for r in rows if r['kind'] == 'proc'}
+    assert by_pid[103]['role'] == 'worker'
+    assert by_pid[103]['orphan'] == 1
+    assert by_pid[100]['role'] == 'gui_launcher'
+    assert by_pid[100]['orphan'] == ''
+    assert 'server=0' in rows[-1]['counts']
+    assert 'orphan=4' in rows[-1]['counts']
+
+
+# ---------------------------------------------------------------- partial writes, drops
+
+class HalfFile:
+    """Writes half of the text, then fails like a full disk"""
+
+    def __init__(self, f):
+        self.f = f
+
+    def write(self, text):
+        self.f.write(text[:len(text) // 2])
+        self.f.flush()
+        raise OSError(28, 'No space left on device')
+
+    def flush(self):
+        self.f.flush()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.f.close()
+
+
+def patch_append(monkeypatch, wrap):
+    real_open = open
+
+    def fake_open(file, mode='r', *args, **kwargs):
+        f = real_open(file, mode, *args, **kwargs)
+        if 'a' in mode:
+            return wrap(f)
+        return f
+
+    monkeypatch.setattr('builtins.open', fake_open)
+    return real_open
+
+
+def test_csv_partial_write_is_cut_back(tmp_path, monkeypatch):
+    path = str(tmp_path / 'soak.csv')
+    sink = CsvSink(path)
+    assert sink.write([{'kind': 'probe', 'sample': 1}])
+    good_size = os.path.getsize(path)
+
+    real_open = patch_append(monkeypatch, HalfFile)
+    assert not sink.write([{'kind': 'probe', 'sample': 2, 'cmdline': 'x' * 200}])
+    monkeypatch.setattr('builtins.open', real_open)
+    assert os.path.getsize(path) == good_size
+
+    assert sink.write([{'kind': 'probe', 'sample': 3}])
+    rows = read_csv(path)
+    assert all(len(row) == len(COLUMNS) for row in rows)
+    assert [row[COLUMNS.index('sample')] for row in rows[1:]] == ['1', '2', '3']
+    assert sink.ok
+
+
+def test_csv_no_append_while_tail_cannot_be_repaired(tmp_path, monkeypatch):
+    path = str(tmp_path / 'soak.csv')
+    sink = CsvSink(path)
+    assert sink.write([{'kind': 'probe', 'sample': 1}])
+    good_size = os.path.getsize(path)
+
+    def no_truncate(*args):
+        raise PermissionError('locked')
+
+    monkeypatch.setattr(os, 'truncate', no_truncate)
+    real_open = patch_append(monkeypatch, HalfFile)
+    assert not sink.write([{'kind': 'probe', 'sample': 2}])
+    monkeypatch.setattr('builtins.open', real_open)
+    damaged_size = os.path.getsize(path)
+    assert damaged_size > good_size
+    # Damaged tail still there: refuse to append after it
+    assert not sink.write([{'kind': 'probe', 'sample': 3}])
+    assert os.path.getsize(path) == damaged_size
+    assert not sink.ok
+
+    clock = FakeClock()
+    assert soak_probe.run(lambda s, n: [], sink, 10, samples=1, clock=clock.clock, sleep=clock.sleep) == 1
+
+    monkeypatch.undo()
+    assert sink.write([])
+    rows = read_csv(path)
+    assert all(len(row) == len(COLUMNS) for row in rows)
+    assert [row[COLUMNS.index('sample')] for row in rows[1:]] == ['1', '2', '3']
+
+
+def test_dropped_rows_fail_the_run(tmp_path, monkeypatch):
+    path = str(tmp_path / 'soak.csv')
+    sink = CsvSink(path, max_pending=2)
+    locked = {'on': False}
+    real_open = open
+
+    def fake_open(file, mode='r', *args, **kwargs):
+        if locked['on'] and 'a' in mode:
+            raise PermissionError('locked')
+        return real_open(file, mode, *args, **kwargs)
+
+    monkeypatch.setattr('builtins.open', fake_open)
+
+    def take_sample(sample, now):
+        locked['on'] = sample <= 3
+        return [{'kind': 'probe'}]
+
+    clock = FakeClock()
+    code = soak_probe.run(take_sample, sink, 10, samples=4, clock=clock.clock, sleep=clock.sleep)
+    monkeypatch.setattr('builtins.open', real_open)
+    assert code == 1
+    assert sink.dropped == 2
+    rows = read_csv(path)
+    kinds = [row[COLUMNS.index('kind')] for row in rows[1:]]
+    samples = [row[COLUMNS.index('sample')] for row in rows[1:]]
+    assert kinds == ['probe', 'probe', 'error']
+    assert samples == ['3', '4', '4']
+    assert '2 rows dropped' in rows[-1][COLUMNS.index('error')]
+
+
+# ---------------------------------------------------------------- helper isolation
+
+STALL_HELPER = [sys.executable, '-c',
+                'import json, sys, time\n'
+                'for arg in sys.argv[1:]:\n'
+                '    if arg == "4242":\n'
+                '        time.sleep(60)\n'
+                '    print(json.dumps({"pid": int(arg), "files": ["log/2026-11-25_" + arg + ".txt"]}))\n'
+                '    sys.stdout.flush()\n']
+
+
+def test_handle_lookup_isolates_stuck_pid():
+    lookup = soak_probe.HandleLookup(timeout=1.0, command=STALL_HELPER)
+    files, error = lookup([4343, 4242])
+    # 4242 sorts first and stalls the batch
+    assert files == {}
+    assert 'at pid 4242' in error
+    assert lookup.suspects == {4242}
+
+    start = time.monotonic()
+    files, error = lookup([4343, 4242])
+    assert time.monotonic() - start < 5
+    assert files == {4343: ['log/2026-11-25_4343.txt']}
+    assert 'at pid 4242' in error
+
+    files, error = lookup([4343])
+    assert files == {4343: ['log/2026-11-25_4343.txt']}
+    assert error == ''
+    assert lookup.suspects == set()
+
+
+# ---------------------------------------------------------------- bounded http threads
+
+def http_threads():
+    return [t for t in threading.enumerate() if t.name == 'soak-probe-http' and t.is_alive()]
+
+
+def test_http_checker_keeps_one_stuck_request():
+    release = threading.Event()
+
+    def factory(url, timeout, insecure):
+        # Like getaddrinfo: blocked before any socket exists, cannot be aborted
+        release.wait(30)
+        raise RuntimeError('resolver back')
+
+    checker = soak_probe.HttpChecker(factory=factory)
+    before = len(http_threads())
+    row = checker.check('http://alas.invalid/', timeout=0.2)
+    assert row['error'].startswith('Timeout')
+    for _ in range(3):
+        row = checker.check('http://alas.invalid/', timeout=0.2)
+        assert row['error'].startswith('Skipped: previous request still running')
+    assert len(http_threads()) - before == 1
+
+    release.set()
+    checker.pending[0].join(5)
+    row = checker.check('http://alas.invalid/', timeout=2)
+    assert row['error'] == 'RuntimeError: resolver back'
+    assert len(http_threads()) == before
+
+
+# ---------------------------------------------------------------- ipv6
+
+def test_resolve_endpoint_ipv6_wildcard():
+    assert soak_probe.resolve_endpoint(['gui.py', '--host', '::'])[0] == 'http://[::1]:22267/'
+    assert soak_probe.resolve_endpoint(None, {'WebuiHost': '::', 'WebuiPort': 22367})[0] == 'http://[::1]:22367/'
+    assert soak_probe.resolve_endpoint(['gui.py', '--host', '0.0.0.0'])[0] == 'http://127.0.0.1:22267/'
+
+
+def test_http_row_ipv6_only_listener():
+    if not socket.has_ipv6:
+        pytest.skip('no IPv6')
+
+    class Server6(HTTPServer):
+        address_family = socket.AF_INET6
+
+    try:
+        server = Server6(('::1', 0), _Handler)
+    except OSError:
+        pytest.skip('cannot bind ::1')
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        url = soak_probe.resolve_endpoint(['gui.py', '--host', '::', '--port', str(server.server_address[1])])[0]
+        row = build_http_row(url, timeout=5)
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert row['http_status'] == 200
+
+
+# ---------------------------------------------------------------- zombies, trackers, no-child fallback
+
+def test_zombie_server_does_not_count_as_server():
+    memory = soak_probe.RoleMemory()
+    classify(reload_tree(), 22267, memory=memory)
+    # POSIX: killed server stays as a zombie until gui.py reaps it
+    zombie = [s._replace(status='zombie', listen_ports=set()) if s.pid == 101 else s for s in reload_tree()]
+    zombie = [s._replace(ppid=1) if s.ppid == 101 else s for s in zombie]
+    roles = classify(zombie, 22267, memory=memory)
+    assert roles[101] == ('zombie', 'server', 100)
+    assert roles[100] == ('gui_launcher', '', 100)
+    assert roles[103] == ('worker', 'alas', 100)
+    counts = dict(kv.split('=') for kv in soak_probe.format_counts(roles, memory.orphans).split(';'))
+    assert counts['server'] == '0'
+    assert counts['zombie'] == '1'
+
+
+def test_unrelated_zombies_are_not_reported():
+    roles = classify([snap(500, 1, 'bash', ['bash'], 1000.0, status='zombie')], 22267)
+    assert roles == {}
+
+
+def test_gui_without_live_child_is_not_server():
+    # gui.py whose spawned server died (zombie) before the probe started; only the tracker is left
+    snaps = [
+        snap(100, 1, 'python3', ['python3', 'gui.py', '--port', '22997'], 1000.0),
+        snap(101, 100, 'python3', ['/usr/bin/python3', '-c',
+                                   'from multiprocessing.resource_tracker import main;main(3)'], 1000.5),
+        snap(102, 100, 'python3', spawn_cmd(), 1001.0, status='zombie'),
+    ]
+    roles = classify(snaps, 22267)
+    assert roles[100] == ('gui_launcher', '', 100)
+    assert roles[101] == ('python_descendant', '', 100)
+    assert roles[102] == ('zombie', '', 100)
+    assert 'server' not in {r for r, _, _ in roles.values()}
+
+
+def test_tracker_is_never_sync_manager():
+    snaps = [
+        snap(100, 1, 'python3', ['python3', 'gui.py'], 1000.0, listen=[22267]),
+        snap(101, 100, 'python3', ['python3', '-c', 'from multiprocessing.resource_tracker import main;main(3)'],
+             1000.5),
+        snap(102, 100, 'python3', spawn_cmd(), 1001.0),
+    ]
+    roles = classify(snaps, 22267)
+    assert roles[101] == ('python_descendant', '', 100)
+    assert roles[102] == ('sync_manager', '', 100)

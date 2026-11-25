@@ -43,14 +43,22 @@ Notes:
 - MuMu may run elevated; metrics then come back blank with error=AccessDenied.
   Run the probe from an elevated prompt if those are needed.
 - At 60 s per sample a 72h run is ~100k rows (~20-30 MB).
-- If the CSV is locked (e.g. opened in Excel), rows are kept in memory and
-  written on the next successful sample. If rows are still unwritten when the
-  probe stops, it exits with code 1.
+- If the CSV is locked (e.g. opened in Excel), rows are kept in memory (up to
+  20000) and written on the next successful sample; a partial row left by a
+  failed write is cut off first. If rows are still unwritten when the probe
+  stops, or rows had to be dropped, it exits with code 1.
+- Processes recognised earlier keep being reported after their server exits,
+  with orphan=1 (counts: orphan=N); the launcher is not taken for the server.
+  A gui.py is only guessed to be the server (no listener seen) when it has a
+  live child. POSIX zombies are reported with role=zombie (instance = the role
+  they had) and never counted as live; multiprocessing tracker processes are
+  never taken for ALAS processes.
 """
 import argparse
 import csv
 import fnmatch
 import http.client
+import io
 import json
 import os
 import re
@@ -71,7 +79,7 @@ except ImportError:  # pragma: no cover - checked in main()
     psutil = None
 
 COLUMNS = (
-    'ts', 'sample', 'kind', 'role', 'instance', 'tree',
+    'ts', 'sample', 'kind', 'role', 'instance', 'tree', 'orphan',
     'pid', 'ppid', 'name', 'status', 'create_time',
     'rss_mb', 'vms_mb', 'threads', 'handles', 'fds', 'cpu_pct', 'cmdline',
     'path', 'size_bytes', 'mtime_age_s', 'last_line_ts', 'last_line_age_s',
@@ -82,11 +90,13 @@ COLUMNS = (
 # Order of the proc rows inside one sample, and roles always present in counts
 ROLE_ORDER = (
     'gui_launcher', 'server', 'sync_manager', 'worker', 'unknown', 'python_descendant',
-    'descendant', 'electron_main', 'electron_renderer', 'electron_other', 'mumu', 'extra', 'pinned',
+    'descendant', 'electron_main', 'electron_renderer', 'electron_other', 'mumu', 'extra', 'pinned', 'zombie',
 )
 COUNTED_ROLES = ('server', 'sync_manager', 'worker', 'unknown', 'electron_main', 'electron_renderer', 'mumu')
 # Roles that are remembered per process once recognised
 REMEMBERED_ROLES = ('server', 'sync_manager', 'worker')
+# Roles still reported when the process is no longer under its server
+ORPHAN_ROLES = REMEMBERED_ROLES + ('unknown',)
 
 DEFAULT_ELECTRON_NAMES = ('alas.exe', 'electron.exe')
 DEFAULT_MUMU_PATTERNS = ('MuMuPlayer*', 'MuMuVMMHeadless*')
@@ -112,12 +122,13 @@ LOG_NAME_RE = re.compile(r'^\d{4}-\d{2}-\d{2}_(.+)\.txt$')
 DEPLOY_LINE_RE = re.compile(r'^\s*(\w+)\s*:(.*)$')
 
 ProcSnapshot = namedtuple(
-    'ProcSnapshot', ['pid', 'ppid', 'name', 'cmdline', 'create_time', 'listen_ports', 'open_files'])
+    'ProcSnapshot', ['pid', 'ppid', 'name', 'cmdline', 'create_time', 'listen_ports', 'open_files', 'status'])
 
 
-def make_snapshot(pid, ppid=None, name='', cmdline=None, create_time=0.0, listen_ports=(), open_files=()):
+def make_snapshot(pid, ppid=None, name='', cmdline=None, create_time=0.0, listen_ports=(), open_files=(),
+                  status=''):
     return ProcSnapshot(pid, ppid, name or '', list(cmdline or []), create_time or 0.0,
-                        set(listen_ports), list(open_files))
+                        set(listen_ports), list(open_files), status or '')
 
 
 def snapshot_key(snap):
@@ -197,6 +208,22 @@ def is_gui_command(snap):
     if is_probe_command(snap):
         return False
     return any(basename(arg) == 'gui.py' for arg in snap.cmdline[1:])
+
+
+def is_zombie(snap):
+    """POSIX only: exited, not reaped yet by its parent"""
+    return snap.status == 'zombie'
+
+
+def is_tracker(snap):
+    """multiprocessing resource / semaphore tracker (POSIX), not an ALAS process"""
+    text = ' '.join(snap.cmdline)
+    return 'multiprocessing.resource_tracker' in text or 'multiprocessing.semaphore_tracker' in text
+
+
+def is_candidate(snap):
+    """Python process that can be a server, SyncManager or worker"""
+    return is_python(snap.name) and not is_zombie(snap) and not is_tracker(snap)
 
 
 def is_probe_command(snap):
@@ -359,8 +386,11 @@ def resolve_endpoint(cmdline=None, deploy=None):
     deploy = deploy or {}
     host = options.get('host') or deploy.get('WebuiHost') or DEFAULT_HOST
     host = str(host)
-    if host in ('0.0.0.0', '::', '[::]', '*'):
+    if host in ('0.0.0.0', '*'):
         host = DEFAULT_HOST
+    elif host in ('::', '[::]'):
+        # IPv6 wildcard: an IPv6-only listener is not reachable on 127.0.0.1
+        host = '::1'
     if ':' in host and not host.startswith('['):
         host = '[{}]'.format(host)
     try:
@@ -391,18 +421,27 @@ def url_port(url):
 class RoleMemory:
     """
     Roles recognised in earlier samples, keyed by (pid, create_time), so a
-    worker whose log handle is missed once does not vanish from the counts, and
-    the SyncManager slot of a server is filled once only.
+    worker whose log handle is missed once does not vanish from the counts,
+    the SyncManager slot of a server is filled once only, and processes that
+    outlive their server are still reported (as orphans).
     """
 
     def __init__(self):
+        # (pid, create_time) -> (role, instance, tree)
         self.roles = {}
+        # server keys whose SyncManager slot is filled
         self.manager_assigned = set()
+        # gui.py root key -> key of the server it had
+        self.tree_servers = {}
+        # pids reported from memory outside their tree in the last classify()
+        self.orphans = set()
 
     def prune(self, alive_keys):
         alive_keys = set(alive_keys)
         self.roles = {k: v for k, v in self.roles.items() if k in alive_keys}
         self.manager_assigned &= alive_keys
+        # Keep the entry while the root lives, even when its server is gone
+        self.tree_servers = {k: v for k, v in self.tree_servers.items() if k in alive_keys}
 
 
 def _children_map(snapshots):
@@ -464,16 +503,16 @@ def tree_python_pids(snapshots, self_pid=None):
     pids = set()
     for root, members in gui_trees(snapshots, self_pid):
         pids.add(root.pid)
-        pids.update(d.pid for d, _ in members if is_python(d.name))
+        pids.update(d.pid for d, _ in members if is_candidate(d))
     return pids
 
 
 def _find_server(root, members, port, children, memory):
     """
     Returns:
-        tuple: (server snapshot, positively identified)
+        tuple: (server snapshot or None, positively identified)
     """
-    python_members = [root] + [d for d, _ in members if is_python(d.name)]
+    python_members = [s for s in [root] + [d for d, _ in members] if is_candidate(s)]
     for snap in python_members:
         if port in snap.listen_ports:
             return snap, True
@@ -483,9 +522,16 @@ def _find_server(root, members, port, children, memory):
             return snap, False
     # With EnableReload the server is the launcher's child that has children itself
     for child in children.get(root.pid, []):
-        if is_python(child.name) and any(is_python(c.name) for c in children.get(child.pid, [])):
+        if is_candidate(child) and any(is_candidate(c) for c in children.get(child.pid, [])):
             return child, False
-    return root, False
+    # This tree had a server and it is gone: the launcher does not become the server
+    if snapshot_key(root) in memory.tree_servers:
+        return None, False
+    # Without EnableReload gui.py is the server, and a running server always has
+    # its SyncManager child. No child: no server (starting, or its server is gone).
+    if any(is_candidate(c) for c in children.get(root.pid, [])):
+        return root, False
+    return None, False
 
 
 def classify(snapshots, port=DEFAULT_PORT, electron_names=DEFAULT_ELECTRON_NAMES,
@@ -508,6 +554,9 @@ def classify(snapshots, port=DEFAULT_PORT, electron_names=DEFAULT_ELECTRON_NAMES
     if memory is None:
         memory = RoleMemory()
     roles = {}
+    # Zombies are dead: reported, but they hold no role
+    zombies = [s for s in snapshots if is_zombie(s)]
+    snapshots = [s for s in snapshots if not is_zombie(s)]
     children = _children_map(snapshots)
 
     for root, members in gui_trees(snapshots, self_pid):
@@ -517,16 +566,19 @@ def classify(snapshots, port=DEFAULT_PORT, electron_names=DEFAULT_ELECTRON_NAMES
         roles[root.pid] = ('gui_launcher', '', tree)
         for snap, _ in members:
             roles[snap.pid] = ('python_descendant' if is_python(snap.name) else 'descendant', '', tree)
+        if server is None:
+            continue
         roles[server.pid] = ('server', '', tree)
         server_key = snapshot_key(server)
         if sure:
-            memory.roles[server_key] = ('server', '')
+            memory.roles[server_key] = ('server', '', tree)
+            memory.tree_servers[snapshot_key(root)] = server_key
 
         # Workers: recognised by their own log file, or recognised before
         workers = []
         unresolved = []
         for child in children.get(server.pid, []):
-            if child.pid not in roles or not is_python(child.name):
+            if child.pid not in roles or not is_candidate(child):
                 continue
             key = snapshot_key(child)
             instances = sorted({
@@ -534,7 +586,7 @@ def classify(snapshots, port=DEFAULT_PORT, electron_names=DEFAULT_ELECTRON_NAMES
                 if name and name != 'gui'})
             remembered = memory.roles.get(key)
             if instances:
-                memory.roles[key] = ('worker', instances[0])
+                memory.roles[key] = ('worker', instances[0], tree)
                 roles[child.pid] = ('worker', instances[0], tree)
                 workers.append(child)
             elif remembered is not None and remembered[0] in REMEMBERED_ROLES:
@@ -550,12 +602,29 @@ def classify(snapshots, port=DEFAULT_PORT, electron_names=DEFAULT_ELECTRON_NAMES
         if server_key not in memory.manager_assigned and unresolved:
             candidate = unresolved[0]
             if all(candidate.create_time <= w.create_time for w in workers):
-                memory.roles[snapshot_key(candidate)] = ('sync_manager', '')
+                memory.roles[snapshot_key(candidate)] = ('sync_manager', '', tree)
                 memory.manager_assigned.add(server_key)
                 roles[candidate.pid] = ('sync_manager', '', tree)
                 unresolved = unresolved[1:]
         for child in unresolved:
             roles[child.pid] = ('unknown', '', tree)
+            # Remembered only to keep reporting it if it outlives the server
+            memory.roles.setdefault(snapshot_key(child), ('unknown', '', tree))
+
+    # Known processes that are no longer under their server (server exited,
+    # parent link broken): keep reporting them with their remembered role
+    orphans = set()
+    for snap in snapshots:
+        if snap.pid == self_pid:
+            continue
+        remembered = memory.roles.get(snapshot_key(snap))
+        if remembered is None or remembered[0] not in ORPHAN_ROLES:
+            continue
+        current = roles.get(snap.pid)
+        if current is None or current[0] in ('python_descendant', 'descendant'):
+            roles[snap.pid] = remembered
+            orphans.add(snap.pid)
+    memory.orphans = orphans
 
     electron_names = {n.lower() for n in electron_names}
     mumu_patterns = [p.lower() for p in mumu_patterns]
@@ -584,14 +653,26 @@ def classify(snapshots, port=DEFAULT_PORT, electron_names=DEFAULT_ELECTRON_NAMES
         elif snap.pid in pinned:
             roles[snap.pid] = ('pinned', '', '')
 
+    # Only zombies of ALAS: a remembered process, or a child of a classified one
+    for snap in zombies:
+        remembered = memory.roles.get(snapshot_key(snap))
+        parent = roles.get(snap.ppid)
+        if snap.pid == self_pid:
+            continue
+        if remembered is not None:
+            roles[snap.pid] = ('zombie', remembered[0], remembered[2])
+        elif parent is not None and parent[2] != '':
+            roles[snap.pid] = ('zombie', '', parent[2])
+
     memory.prune(snapshot_key(s) for s in snapshots)
     return roles
 
 
-def format_counts(roles):
+def format_counts(roles, orphans=()):
     counter = Counter(role for role, _, _ in roles.values())
     keys = list(COUNTED_ROLES) + sorted(k for k in counter if k not in COUNTED_ROLES)
-    return ';'.join('{}={}'.format(k, counter.get(k, 0)) for k in keys)
+    text = ';'.join('{}={}'.format(k, counter.get(k, 0)) for k in keys)
+    return '{};orphan={}'.format(text, len(set(orphans) & set(roles)))
 
 
 # ---------------------------------------------------------------- open files
@@ -622,18 +703,62 @@ def helper_main(args):
 
 class HandleLookup:
     """
-    Read open files of some processes in a helper process with a hard timeout.
+    Read open files of some processes in helper processes with a hard timeout.
     Results printed before a timeout are kept.
+
+    The helper answers pids in order, so a pid that hangs blocks the pids after
+    it. The pid a helper was stuck on becomes a suspect: later lookups give each
+    suspect its own helper, run in parallel with the batch of healthy pids, so
+    one stuck process cannot hide the others.
     """
 
     def __init__(self, timeout=5.0, command=None):
         self.timeout = timeout
         self.command = command
+        self.suspects = set()
 
     def build_command(self, pids):
         if self.command is not None:
             return list(self.command) + [str(p) for p in pids]
         return [sys.executable, os.path.abspath(__file__), HELPER_FLAG] + [str(p) for p in pids]
+
+    def _start(self, pids):
+        kwargs = {}
+        if sys.platform.startswith('win'):
+            kwargs['creationflags'] = 0x08000000  # CREATE_NO_WINDOW
+        try:
+            return subprocess.Popen(self.build_command(pids), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                    stdin=subprocess.DEVNULL, **kwargs), ''
+        except OSError as e:
+            return None, short('open_files helper: {}'.format(describe_exception(e)))
+
+    @staticmethod
+    def _parse(out):
+        """
+        Returns:
+            tuple: (dict[int, list[str]], list[str] of failures, set[int] of pids answered, helper error)
+        """
+        files = {}
+        failed = []
+        answered = set()
+        error = ''
+        for line in (out or b'').decode('utf-8', errors='replace').splitlines():
+            try:
+                data = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(data, dict):
+                continue
+            if 'pid' not in data:
+                if data.get('error'):
+                    error = short('open_files helper: {}'.format(data['error']))
+                continue
+            answered.add(data['pid'])
+            if 'files' in data:
+                files[data['pid']] = list(data['files'])
+            else:
+                failed.append('{}:{}'.format(data['pid'], data.get('error', '')))
+        return files, failed, answered, error
 
     def __call__(self, pids):
         """
@@ -643,44 +768,51 @@ class HandleLookup:
         pids = sorted(pids)
         if not pids:
             return {}, ''
-        kwargs = {}
-        if sys.platform.startswith('win'):
-            kwargs['creationflags'] = 0x08000000  # CREATE_NO_WINDOW
-        error = ''
-        try:
-            proc = subprocess.Popen(self.build_command(pids), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                    stdin=subprocess.DEVNULL, **kwargs)
-        except OSError as e:
-            return {}, short('open_files helper: {}'.format(describe_exception(e)))
-        try:
-            out, _ = proc.communicate(timeout=self.timeout)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            try:
-                out, _ = proc.communicate(timeout=self.timeout)
-            except subprocess.TimeoutExpired:
-                out = b''
-            error = 'open_files helper: timeout after {}s'.format(self.timeout)
+        self.suspects &= set(pids)
+        batches = []
+        healthy = [p for p in pids if p not in self.suspects]
+        if healthy:
+            batches.append(healthy)
+        batches.extend([p] for p in sorted(self.suspects))
+
+        deadline = time.monotonic() + self.timeout
+        started = [(batch, self._start(batch)) for batch in batches]
         result = {}
+        errors = []
         failed = []
-        for line in (out or b'').decode('utf-8', errors='replace').splitlines():
+        for batch, (proc, error) in started:
+            if proc is None:
+                errors.append(error)
+                continue
+            timed_out = False
             try:
-                data = json.loads(line)
-            except ValueError:
-                continue
-            if 'pid' not in data:
-                if data.get('error'):
-                    error = short('open_files helper: {}'.format(data['error']))
-                continue
-            if 'files' in data:
-                result[data['pid']] = list(data['files'])
-            else:
-                failed.append('{}:{}'.format(data['pid'], data.get('error', '')))
-        if not error and proc.returncode not in (0, None):
-            error = 'open_files helper: exit code {}'.format(proc.returncode)
-        if failed and not error:
-            error = short('open_files failed: ' + ';'.join(failed))
-        return result, error
+                out, _ = proc.communicate(timeout=max(0.0, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                proc.kill()
+                try:
+                    out, _ = proc.communicate(timeout=2.0)
+                except subprocess.TimeoutExpired:
+                    out = b''
+            files, batch_failed, answered, error = self._parse(out)
+            result.update(files)
+            failed.extend(batch_failed)
+            self.suspects -= answered
+            if timed_out:
+                pending = [p for p in batch if p not in answered]
+                if pending:
+                    self.suspects.add(pending[0])
+                    errors.append('open_files helper: timeout after {}s at pid {}, skipped {}'.format(
+                        self.timeout, pending[0], ','.join(str(p) for p in pending[1:]) or '-'))
+                else:
+                    errors.append('open_files helper: timeout after {}s'.format(self.timeout))
+            elif error:
+                errors.append(error)
+            elif proc.returncode not in (0, None):
+                errors.append('open_files helper: exit code {}'.format(proc.returncode))
+        if failed:
+            errors.append('open_files failed: ' + ';'.join(failed))
+        return result, short('; '.join(errors))
 
 
 # ---------------------------------------------------------------- rows
@@ -712,7 +844,7 @@ class CpuCache:
                 del self.procs[key]
 
 
-def build_proc_row(proc, snap, role, instance='', tree='', cpu_cache=None):
+def build_proc_row(proc, snap, role, instance='', tree='', cpu_cache=None, orphan=False):
     """
     Args:
         proc: psutil.Process-like object, every call may raise.
@@ -721,6 +853,7 @@ def build_proc_row(proc, snap, role, instance='', tree='', cpu_cache=None):
         instance (str):
         tree (int, str):
         cpu_cache (CpuCache):
+        orphan (bool): Known process no longer found under its server.
 
     Returns:
         dict:
@@ -738,7 +871,7 @@ def build_proc_row(proc, snap, role, instance='', tree='', cpu_cache=None):
         return value
 
     row = {
-        'kind': 'proc', 'role': role, 'instance': instance, 'tree': tree,
+        'kind': 'proc', 'role': role, 'instance': instance, 'tree': tree, 'orphan': 1 if orphan else '',
         'pid': snap.pid, 'ppid': '' if snap.ppid is None else snap.ppid,
         'name': snap.name, 'create_time': iso_from_timestamp(snap.create_time),
         'cmdline': format_cmdline(snap),
@@ -873,55 +1006,83 @@ def _abort_connection(conn):
         pass
 
 
-def build_http_row(url, timeout=10.0, insecure=False, factory=open_connection, clock=time.monotonic):
+class HttpChecker:
     """
     GET the GUI and record the status once the response headers arrive; the
     body is not read. ``timeout`` is a deadline for the whole request, a slow
     server cannot stretch it. Never raises.
 
-    Returns:
-        dict:
+    The request runs in a daemon thread. A thread stuck where it cannot be
+    interrupted (name resolution before a socket exists) is not abandoned for
+    a new one: while it is alive, later checks are skipped and say so, so at
+    most one request thread exists at any time.
     """
-    row = {'kind': 'http', 'url': url}
-    state = {}
-    lock = threading.Lock()
 
-    def request():
-        conn = None
-        try:
-            conn, path = factory(url, timeout, insecure)
+    def __init__(self, factory=open_connection, clock=time.monotonic):
+        self.factory = factory
+        self.clock = clock
+        self.pending = None
+
+    def check(self, url, timeout=10.0, insecure=False):
+        """
+        Returns:
+            dict:
+        """
+        row = {'kind': 'http', 'url': url}
+        clock = self.clock
+        if self.pending is not None:
+            thread, since = self.pending
+            if thread.is_alive():
+                row['error'] = 'Skipped: previous request still running for {}s'.format(round(clock() - since, 1))
+                return row
+            self.pending = None
+
+        state = {}
+        lock = threading.Lock()
+        factory = self.factory
+
+        def request():
+            conn = None
+            try:
+                conn, path = factory(url, timeout, insecure)
+                with lock:
+                    state['conn'] = conn
+                conn.request('GET', path, headers={'Connection': 'close', 'User-Agent': 'alas-soak-probe'})
+                response = conn.getresponse()
+                state['status'] = response.status
+            except Exception as e:
+                state['error'] = short('{}: {}'.format(type(e).__name__, e))
+            finally:
+                state['end'] = clock()
+                if conn is not None:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+
+        start = clock()
+        thread = threading.Thread(target=request, name='soak-probe-http', daemon=True)
+        thread.start()
+        thread.join(timeout)
+        if thread.is_alive():
             with lock:
-                state['conn'] = conn
-            conn.request('GET', path, headers={'Connection': 'close', 'User-Agent': 'alas-soak-probe'})
-            response = conn.getresponse()
-            state['status'] = response.status
-        except Exception as e:
-            state['error'] = short('{}: {}'.format(type(e).__name__, e))
-        finally:
-            state['end'] = clock()
-            if conn is not None:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-
-    start = clock()
-    thread = threading.Thread(target=request, name='soak-probe-http', daemon=True)
-    thread.start()
-    thread.join(timeout)
-    if thread.is_alive():
-        with lock:
-            conn = state.get('conn')
-        _abort_connection(conn)
-        row['error'] = 'Timeout: no response headers within {}s'.format(timeout)
-        row['latency_ms'] = round((clock() - start) * 1000, 1)
+                conn = state.get('conn')
+            _abort_connection(conn)
+            self.pending = (thread, start)
+            row['error'] = 'Timeout: no response headers within {}s'.format(timeout)
+            row['latency_ms'] = round((clock() - start) * 1000, 1)
+            return row
+        if 'status' in state:
+            row['http_status'] = state['status']
+        if 'error' in state:
+            row['error'] = state['error']
+        row['latency_ms'] = round((state.get('end', clock()) - start) * 1000, 1)
         return row
-    if 'status' in state:
-        row['http_status'] = state['status']
-    if 'error' in state:
-        row['error'] = state['error']
-    row['latency_ms'] = round((state.get('end', clock()) - start) * 1000, 1)
-    return row
+
+
+def build_http_row(url, timeout=10.0, insecure=False, factory=open_connection, clock=time.monotonic):
+    """One-off HttpChecker.check()"""
+    return HttpChecker(factory, clock).check(url, timeout, insecure)
 
 
 def error_row(e, where=''):
@@ -936,13 +1097,25 @@ def error_row(e, where=''):
 class CsvSink:
     """
     Append rows to a CSV file, reopening it on every write so the file can be
-    moved or truncated while the probe runs. Rows that fail to write (file
-    locked by another program) are kept and written next time.
+    moved or truncated while the probe runs.
+
+    - Rows that fail to write (file locked by another program, disk full) are
+      kept and written next time, at most ``max_pending`` of them; older rows
+      beyond that are dropped and counted in ``dropped``, and an error row
+      records the loss once the file is writable again.
+    - A write that failed after the file was opened may have left a partial
+      row: the file is cut back to its size before that write, and nothing is
+      appended until that succeeds.
     """
 
-    def __init__(self, path, now=datetime.now):
+    def __init__(self, path, now=datetime.now, max_pending=PENDING_MAX):
         self.path = self.resolve_path(str(path), now)
         self.pending = []
+        self.max_pending = max_pending
+        self.dropped = 0
+        self.dropped_reported = 0
+        # Size to cut the file back to before the next append, after a failed write
+        self.repair_size = None
 
     @staticmethod
     def header_line():
@@ -963,29 +1136,75 @@ class CsvSink:
                 return '{}.{}{}'.format(stem, now().strftime('%Y%m%d-%H%M%S'), ext or '.csv')
         return path
 
+    @property
+    def ok(self):
+        """Every row so far is on disk"""
+        return not self.pending and not self.dropped and self.repair_size is None
+
+    def _repair(self):
+        if self.repair_size is None:
+            return
+        if os.path.exists(self.path) and os.path.getsize(self.path) > self.repair_size:
+            os.truncate(self.path, self.repair_size)
+        self.repair_size = None
+
+    @staticmethod
+    def _render(rows, header):
+        buffer = io.StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=COLUMNS, restval='', extrasaction='ignore')
+        if header:
+            writer.writeheader()
+        writer.writerows(rows)
+        return buffer.getvalue()
+
+    def _warn(self, e):
+        sys.stderr.write('soak_probe: cannot write {}: {}\n'.format(self.path, describe_exception(e)))
+
     def write(self, rows):
         """
         Returns:
             bool: If all pending rows were written.
         """
         self.pending.extend(rows)
-        if len(self.pending) > PENDING_MAX:
-            self.pending = self.pending[-PENDING_MAX:]
+        excess = len(self.pending) - self.max_pending
+        if excess > 0:
+            self.pending = self.pending[excess:]
+            self.dropped += excess
+        if not self.pending:
+            return True
+        batch = list(self.pending)
+        lost = self.dropped - self.dropped_reported
+        if lost:
+            last = batch[-1]
+            batch.append({'ts': last.get('ts', ''), 'sample': last.get('sample', ''), 'kind': 'error',
+                          'error': '{} rows dropped while the output was not writable'.format(lost)})
         try:
+            self._repair()
             folder = os.path.dirname(os.path.abspath(self.path))
             if not os.path.isdir(folder):
                 os.makedirs(folder)
-            new = not os.path.exists(self.path) or os.path.getsize(self.path) == 0
+            size = os.path.getsize(self.path) if os.path.exists(self.path) else 0
+        except OSError as e:
+            self._warn(e)
+            return False
+        text = self._render(batch, header=size == 0)
+        opened = False
+        try:
             with open(self.path, 'a', encoding='utf-8', newline='') as f:
-                writer = csv.DictWriter(f, fieldnames=COLUMNS, restval='', extrasaction='ignore')
-                if new:
-                    writer.writeheader()
-                writer.writerows(self.pending)
+                opened = True
+                f.write(text)
                 f.flush()
         except OSError as e:
-            sys.stderr.write('soak_probe: cannot write {}: {}\n'.format(self.path, describe_exception(e)))
+            self._warn(e)
+            if opened:
+                self.repair_size = size
+                try:
+                    self._repair()
+                except OSError:
+                    pass
             return False
         self.pending = []
+        self.dropped_reported = self.dropped
         return True
 
 
@@ -1017,6 +1236,7 @@ class Sampler:
         self.self_pid = os.getpid() if self_pid is None else self_pid
         self.alas_root = alas_root
         self.handle_lookup = handle_lookup or HandleLookup()
+        self.http = HttpChecker()
         self.cpu_cache = CpuCache()
         self.memory = RoleMemory()
         self.self_proc = None
@@ -1051,13 +1271,14 @@ class Sampler:
         """
         snapshots = []
         procs = {}
-        for proc in self.ps.process_iter(['pid', 'ppid', 'name', 'create_time', 'cmdline']):
+        for proc in self.ps.process_iter(['pid', 'ppid', 'name', 'create_time', 'cmdline', 'status']):
             info = getattr(proc, 'info', None) or {}
             pid = info.get('pid', getattr(proc, 'pid', None))
             if pid is None:
                 continue
             snapshots.append(make_snapshot(
-                pid, info.get('ppid'), info.get('name'), info.get('cmdline'), info.get('create_time')))
+                pid, info.get('ppid'), info.get('name'), info.get('cmdline'), info.get('create_time'),
+                status=info.get('status')))
             procs[pid] = proc
 
         # Expensive calls only for the python processes of ALAS trees
@@ -1093,12 +1314,13 @@ class Sampler:
         rows = []
         for pid in sorted(roles, key=lambda p: (order.get(roles[p][0], len(order)), roles[p][2] or 0, p)):
             role, instance, tree = roles[pid]
-            rows.append(build_proc_row(procs[pid], by_pid[pid], role, instance, tree, self.cpu_cache))
+            rows.append(build_proc_row(procs[pid], by_pid[pid], role, instance, tree, self.cpu_cache,
+                                       orphan=pid in self.memory.orphans))
         for pid in self.pinned:
             if pid not in roles:
                 rows.append({'kind': 'proc', 'role': 'pinned', 'pid': pid, 'status': 'missing'})
         self.cpu_cache.prune(snapshot_key(by_pid[p]) for p in roles)
-        return rows, format_counts(roles), url, insecure
+        return rows, format_counts(roles, self.memory.orphans), url, insecure
 
     def probe_row(self, counts, start):
         row = {'kind': 'probe', 'role': 'probe', 'pid': self.self_pid, 'counts': counts}
@@ -1145,7 +1367,7 @@ class Sampler:
                 rows.append(error_row(e, 'endpoint'))
         if url is not None:
             try:
-                rows.append(build_http_row(url, self.http_timeout, insecure))
+                rows.append(self.http.check(url, self.http_timeout, insecure))
             except Exception as e:
                 rows.append(error_row(e, 'http'))
         rows.append(self.probe_row(counts, start))
@@ -1173,7 +1395,7 @@ def run(take_sample, sink, interval, duration=0.0, samples=0,
         retry_delay (float): Seconds between those attempts.
 
     Returns:
-        int: Exit code, 1 if some rows could not be written.
+        int: Exit code, 1 if some rows could not be written or were dropped.
     """
     start = clock()
     sample = 0
@@ -1206,10 +1428,15 @@ def run(take_sample, sink, interval, duration=0.0, samples=0,
                 sleep(retry_delay)
     except KeyboardInterrupt:
         pass
+    code = 0
     if sink.pending:
         sys.stderr.write('soak_probe: {} rows could not be written to {}\n'.format(len(sink.pending), sink.path))
-        return 1
-    return 0
+        code = 1
+    if sink.dropped:
+        sys.stderr.write('soak_probe: {} rows were dropped while {} was not writable\n'.format(
+            sink.dropped, sink.path))
+        code = 1
+    return code
 
 
 # ---------------------------------------------------------------- main
