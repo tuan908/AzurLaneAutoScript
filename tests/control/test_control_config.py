@@ -42,8 +42,9 @@ def make_service(files, mod="alas", save_callback=lambda key, value: ()):
             return json.load(f)
 
     def write_config(name, data):
+        # Same serialisation as module.config.utils.write_file
         with open(files[name], "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+            json.dump(data, f, indent=2, ensure_ascii=False, default=str)
 
     return ConfigService(
         config_mod=lambda name: mod,
@@ -171,6 +172,25 @@ def test_save_callback_derived_keys(files):
     result = service.update("alas", service.read("alas")["revision"], {"Alas.Emulator.Serial": "x:1"})
     assert result["applied"]["Alas.Emulator.AdbRestart"] is True
     assert service.read("alas")["config"]["Alas"]["Emulator"]["AdbRestart"] is True
+
+
+def test_read_sends_datetimes_as_strings(files):
+    import datetime
+
+    service = make_service(files)
+    plain = service._read_config
+
+    def with_datetimes(name):
+        config = plain(name)
+        config["Commission"]["Scheduler"]["NextRun"] = datetime.datetime(2026, 11, 25, 8, 30, 5)
+        return config
+
+    service._read_config = with_datetimes
+    body = service.read("alas")
+    json.dumps(body)
+    assert body["config"]["Commission"]["Scheduler"]["NextRun"] == "2026-11-25 08:30:05"
+    # Saving still works when the parsed config holds datetimes
+    service.update("alas", body["revision"], {"Alas.Emulator.Serial": "x:1"})
 
 
 def test_mod_instances_unsupported(files):

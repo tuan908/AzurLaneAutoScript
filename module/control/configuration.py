@@ -35,6 +35,19 @@ class ConfigUnsupported(Exception):
     pass
 
 
+def _jsonable(value: Any) -> Any:
+    """ConfigUpdater.read_file gives datetime objects; send them as the file stores them"""
+    if isinstance(value, dict):
+        return {k: _jsonable(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_jsonable(v) for v in value]
+    if isinstance(value, datetime.datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(value, (datetime.date, datetime.time)):
+        return value.isoformat()
+    return value
+
+
 def _revision(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()[:16]
 
@@ -159,6 +172,7 @@ class ConfigService:
         }
         if "option" in meta:
             names = deep_get(i18n, [group, arg], default={}) or {}
+            field["default"] = _jsonable(field["default"])
             field["options"] = [
                 {"value": option, "label": str(names.get(str(option), option)) if isinstance(names, dict) else str(option)}
                 for option in meta["option"]
@@ -174,7 +188,7 @@ class ConfigService:
     def read(self, instance_id: str) -> dict:
         self._require_alas(instance_id)
         revision = _revision(self._read_raw(instance_id))
-        return {"revision": revision, "config": self._read_config(instance_id)}
+        return {"revision": revision, "config": _jsonable(self._read_config(instance_id))}
 
     def update(self, instance_id: str, revision: str, changes: Dict[str, Any]) -> dict:
         """
