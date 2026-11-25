@@ -2,8 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
 import { ApiError, api, type ConfigField, type ConfigValue } from "@/api/client";
+import { queryKeys } from "@/api/query-keys";
 
-import { tasksQuery } from "../scheduler/queries";
 import { changeDraft, draftValue, type Draft } from "./config-draft";
 import { configQuery } from "./queries";
 
@@ -17,14 +17,13 @@ export function useConfigEditor(id: string) {
   const [refreshing, setRefreshing] = useState(false);
   const lock = useRef(false);
   const save = useMutation({
+    meta: { invalidates: [queryKeys.config(id), queryKeys.tasks(id)] },
     mutationFn: (submitted: Draft) =>
       api.updateConfig(id, submitted.baseline.revision, submitted.edits),
     onSuccess: async (result) => {
-      // Do not let a new draft begin against the previous revision.
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: configQuery(id).queryKey }),
-        qc.invalidateQueries({ queryKey: tasksQuery(id).queryKey }),
-      ]);
+      // Stay pending until the new revision is loaded, so no draft starts against the old one.
+      // The global onSuccess already started this refetch; cancelRefetch: false joins it.
+      await qc.invalidateQueries({ queryKey: queryKeys.config(id) }, { cancelRefetch: false });
       setDraft(null);
       setErrors({});
       setConflict(false);

@@ -1,9 +1,10 @@
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
 
 import { api, ApiError, type InstanceStatus } from "@/api/client";
+import { queryKeys } from "@/api/query-keys";
 
-export const instanceKey = ["instances"] as const;
-export const taskKey = (id: string) => ["tasks", id] as const;
+export const instanceKey = queryKeys.instances;
+export const taskKey = queryKeys.tasks;
 
 type Generation = {
   streamId: string;

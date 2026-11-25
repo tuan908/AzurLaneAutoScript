@@ -1,9 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Input } from "@ui-sdk/react/input";
 import { Switch, SwitchThumb } from "@ui-sdk/react/switch";
 import { useState } from "react";
 
 import { api, type InstancePolicy, type InstanceStatus } from "@/api/client";
+import { queryKeys } from "@/api/query-keys";
 import { Banner } from "@/shared/ui/banner";
 import { Card } from "@/shared/ui/card";
 
@@ -12,7 +13,6 @@ import { firstIssue, MaxRestartsInput, StallMinutesInput } from "./policy-input"
 import { recoveryQuery } from "./queries";
 
 export function RecoveryControls({ status }: { status: InstanceStatus }) {
-  const qc = useQueryClient();
   const recovery = useQuery(recoveryQuery());
   const [stallDraft, setStallDraft] = useState<string | null>(null);
   const [inputError, setInputError] = useState<{ stall: string | null; max: string | null }>({
@@ -24,16 +24,13 @@ export function RecoveryControls({ status }: { status: InstanceStatus }) {
   const global = recovery.data?.policy;
 
   const update = useMutation({
+    meta: { invalidates: [queryKeys.recovery, queryKeys.instances] },
     mutationFn: (changes: Partial<InstancePolicy>) =>
       api.updatePolicy({ instances: { [status.id]: changes } }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["recovery"] });
-      void qc.invalidateQueries({ queryKey: ["instances"] });
-    },
   });
   const updateGlobal = useMutation({
+    meta: { invalidates: [queryKeys.recovery] },
     mutationFn: api.updatePolicy,
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["recovery"] }),
   });
 
   return (

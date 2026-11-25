@@ -2,8 +2,9 @@ import { useMutation, useMutationState, useQueryClient } from "@tanstack/react-q
 import { toast } from "@ui-sdk/react/toast";
 
 import { api } from "@/api/client";
+import { queryKeys } from "@/api/query-keys";
 
-import { applyInstanceUpdate, instanceGeneration, instanceKey } from "./instance-cache";
+import { applyInstanceUpdate, instanceGeneration } from "./instance-cache";
 
 type Action = "start" | "stop" | "restart";
 export function useInstanceCommand(id: string) {
@@ -15,6 +16,14 @@ export function useInstanceCommand(id: string) {
   });
   const mutation = useMutation({
     mutationKey: key,
+    meta: {
+      invalidates: [
+        queryKeys.instances,
+        queryKeys.tasks(id),
+        queryKeys.health,
+        queryKeys.healthDetails,
+      ],
+    },
     mutationFn: async ({ action, epoch }: { action: Action; epoch: number }) => {
       if (epoch !== instanceGeneration(client))
         throw new Error("Server changed before command execution");
@@ -27,8 +36,9 @@ export function useInstanceCommand(id: string) {
         description: status.processId ? `Worker PID ${status.processId}` : undefined,
       });
     },
-    onSettled: () => {
-      void client.invalidateQueries({ queryKey: instanceKey });
+    // A failed command can still have changed the worker; success is covered by meta.
+    onError: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.instances });
     },
   });
   return {

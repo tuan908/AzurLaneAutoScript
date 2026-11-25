@@ -10,11 +10,12 @@ import { Input } from "@ui-sdk/react/input";
 import { useState } from "react";
 
 import { api, type InstanceStatus } from "@/api/client";
+import { queryKeys } from "@/api/query-keys";
 import { ProfileNameSchema } from "@/api/schemas";
 import { Button } from "@/shared/ui/button";
 import { Select } from "@/shared/ui/select";
 
-import { applyInstanceUpdate, instanceKey } from "./instance-cache";
+import { applyInstanceUpdate } from "./instance-cache";
 
 export default function ProfileDialog({
   instances,
@@ -29,11 +30,11 @@ export default function ProfileDialog({
   const [source, setSource] = useState("default");
   const [nameError, setNameError] = useState<string | null>(null);
   const create = useMutation({
+    meta: { invalidates: [queryKeys.instances, queryKeys.health] },
     mutationFn: (id: string) =>
       api.createProfile(id, source === "default" ? null : source.slice(8)),
     onSuccess: (profile) => {
       applyInstanceUpdate(qc, profile);
-      void qc.invalidateQueries({ queryKey: instanceKey });
       onCreate(profile.id);
       onClose();
     },
