@@ -1,4 +1,6 @@
+import "zod/compile";
 import { useMatches, useNavigate, useParams } from "@tanstack/react-router";
+import * as z from "zod";
 
 export const TAB_LABELS = {
   overview: "Overview",
@@ -7,8 +9,9 @@ export const TAB_LABELS = {
   settings: "Settings",
   health: "Health",
 } as const;
-export type Tab = keyof typeof TAB_LABELS;
-export const TABS = Object.keys(TAB_LABELS) as Tab[];
+export const TabSchema = z.enum(Object.keys(TAB_LABELS) as [keyof typeof TAB_LABELS]);
+export type Tab = z.infer<typeof TabSchema>;
+export const TABS = TabSchema.options;
 
 export function tabPath<T extends Tab>(tab: T): `/$instanceId/${T}` {
   return `/$instanceId/${tab}`;

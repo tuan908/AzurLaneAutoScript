@@ -11,6 +11,8 @@ import {
 
 import { useInstances } from "@/features/instances/queries";
 import { Workspace } from "@/features/instances/workspace";
+import { LogsSearchSchema } from "@/features/logs/search";
+import { SettingsSearchSchema } from "@/features/settings/search";
 
 import { App } from "./app";
 
@@ -101,12 +103,7 @@ const logs = createRoute({
   getParentRoute: () => instance,
   path: "logs",
   staticData: { dashboardTab: "logs" },
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { filter: string; level: "all" | "warn" | "error" } => ({
-    filter: typeof search["filter"] === "string" ? search["filter"] : "",
-    level: search["level"] === "warn" || search["level"] === "error" ? search["level"] : "all",
-  }),
+  validateSearch: LogsSearchSchema,
   search: { middlewares: [stripSearchParams({ filter: "", level: "all" })] },
 }).lazy(() =>
   import("../features/logs/logs").then(({ Logs }) =>
@@ -118,10 +115,7 @@ const settings = createRoute({
   getParentRoute: () => instance,
   path: "settings",
   staticData: { dashboardTab: "settings" },
-  validateSearch: (search: Record<string, unknown>) => ({
-    q: typeof search["q"] === "string" ? search["q"] : "",
-    task: typeof search["task"] === "string" ? search["task"] : "",
-  }),
+  validateSearch: SettingsSearchSchema,
   search: { middlewares: [stripSearchParams({ q: "", task: "" })] },
 }).lazy(() =>
   import("../features/settings/settings").then(({ Settings }) =>

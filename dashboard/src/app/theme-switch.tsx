@@ -4,7 +4,7 @@ import {
   SegmentedControlItem,
 } from "@ui-sdk/react/segmented-control";
 
-import { THEMES, type Theme } from "@/shared/theme";
+import { THEMES, ThemeSchema, type Theme } from "@/shared/theme";
 
 const LABELS: Record<Theme, string> = {
   system: "Auto",
@@ -19,7 +19,8 @@ export function ThemeSwitch({ theme, onTheme }: { theme: Theme; onTheme: (t: The
       aria-label="Theme"
       value={theme}
       onValueChange={(next) => {
-        if (THEMES.includes(next as Theme)) onTheme(next as Theme);
+        const parsed = ThemeSchema.safeParse(next);
+        if (parsed.success) onTheme(parsed.data);
       }}
     >
       <SegmentedControlIndicator />

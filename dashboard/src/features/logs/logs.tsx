@@ -14,13 +14,11 @@ import { Icon } from "@/shared/ui/icon";
 
 import { logTone, severity } from "./log-severity";
 import { useLogs } from "./log-store";
+import { LOG_LEVELS, type LogsSearch } from "./search";
 
-const logLevels = [
-  { value: "all", label: "All" },
-  { value: "warn", label: "Warnings+" },
-  { value: "error", label: "Errors" },
-] as const;
-type LogLevel = (typeof logLevels)[number]["value"];
+type LogLevel = LogsSearch["level"];
+const LEVEL_LABELS: Record<LogLevel, string> = { all: "All", warn: "Warnings+", error: "Errors" };
+const logLevels = LOG_LEVELS.map((value) => ({ value, label: LEVEL_LABELS[value] }));
 
 const route = getRouteApi("/$instanceId/logs");
 

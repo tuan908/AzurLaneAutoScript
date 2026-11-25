@@ -21,10 +21,10 @@ import {
 import { useState } from "react";
 
 import type { InstanceStatus } from "@/api/client";
-import { THEMES, type Theme } from "@/shared/theme";
+import { THEMES, ThemeSchema, type Theme } from "@/shared/theme";
 import { toneDot } from "@/shared/ui/status-badge";
 
-import { TAB_LABELS, TABS, useDashboardRoute, type Tab } from "../instances/navigation";
+import { TAB_LABELS, TABS, TabSchema, useDashboardRoute } from "../instances/navigation";
 import { useInstances } from "../instances/queries";
 import { healthTone } from "../instances/status";
 import { useInstanceCommand } from "../instances/use-instance-command";
@@ -64,10 +64,15 @@ export function CommandPalette({ theme, onTheme }: { theme: Theme; onTheme: (t: 
     const [kind, ...rest] = value.split(":");
     const arg = rest.join(":");
     if (kind === "go") go(arg);
-    else if (kind === "tab" && current) go(current.id, arg as Tab);
-    else if (kind === "task") openSettings({ q: "", task: arg });
+    else if (kind === "tab" && current) {
+      const tab = TabSchema.safeParse(arg);
+      if (tab.success) go(current.id, tab.data);
+    } else if (kind === "task") openSettings({ q: "", task: arg });
     else if (kind === "search") openSettings({ q: query.trim(), task: "" });
-    else if (kind === "theme") onTheme(arg as Theme);
+    else if (kind === "theme") {
+      const next = ThemeSchema.safeParse(arg);
+      if (next.success) onTheme(next.data);
+    }
     setOpen(false);
     setQuery("");
   };

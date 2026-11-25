@@ -10,6 +10,7 @@ import { Input } from "@ui-sdk/react/input";
 import { useState } from "react";
 
 import { api, type InstanceStatus } from "@/api/client";
+import { ProfileNameSchema } from "@/api/schemas";
 import { Button } from "@/shared/ui/button";
 import { Select } from "@/shared/ui/select";
 
@@ -26,6 +27,7 @@ export default function ProfileDialog({
 }) {
   const qc = useQueryClient();
   const [source, setSource] = useState("default");
+  const [nameError, setNameError] = useState<string | null>(null);
   const create = useMutation({
     mutationFn: (id: string) =>
       api.createProfile(id, source === "default" ? null : source.slice(8)),
@@ -58,12 +60,26 @@ export default function ProfileDialog({
           onSubmit={(event) => {
             event.preventDefault();
             const fields = new FormData(event.currentTarget);
-            const name = String(fields.get("name") ?? "").trim();
-            if (name) create.mutate(name);
+            const name = ProfileNameSchema.safeParse(fields.get("name") ?? "");
+            if (!name.success) {
+              setNameError(name.error.issues[0]?.message ?? "Invalid profile name");
+              return;
+            }
+            setNameError(null);
+            create.mutate(name.data);
           }}
         >
           <label htmlFor="profile-name">
-            Profile name <Input id="profile-name" name="name" required maxLength={48} />
+            Profile name{" "}
+            <Input
+              id="profile-name"
+              name="name"
+              required
+              maxLength={48}
+              aria-invalid={nameError ? true : undefined}
+              aria-describedby={nameError ? "profile-name-error" : undefined}
+              onValueChange={() => setNameError(null)}
+            />
           </label>
           <div>
             <label htmlFor="profile-source">Copy from</label>
@@ -96,6 +112,11 @@ export default function ProfileDialog({
               Cancel
             </Button>
           </div>
+          {nameError && (
+            <p id="profile-name-error" role="alert" className="text-bad text-xs">
+              {nameError}
+            </p>
+          )}
           {create.error && (
             <p role="alert" className="text-bad text-xs">
               {create.error.message}

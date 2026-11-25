@@ -14,7 +14,7 @@ export function Select({
   label,
   className,
 }: {
-  items: (string | { value: string; label: string })[];
+  items: readonly (string | { value: string; label: string })[];
   value: string;
   onValueChange: (value: string) => void;
   disabled?: boolean;
@@ -24,7 +24,7 @@ export function Select({
 }) {
   return (
     <SdkSelect
-      items={items}
+      items={[...items]}
       value={value}
       disabled={disabled ?? false}
       onValueChange={(next) => {

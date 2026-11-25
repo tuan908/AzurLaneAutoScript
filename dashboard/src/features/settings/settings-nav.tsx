@@ -13,7 +13,7 @@ import type { ConfigSchema } from "@/api/client";
 import { SectionLabel } from "@/shared/ui/section-label";
 import { Select } from "@/shared/ui/select";
 
-import { LANGS } from "./lang";
+import { LANGS, LangSchema, type Lang } from "./lang";
 
 export function SettingsNav({
   menus,
@@ -30,8 +30,8 @@ export function SettingsNav({
   searching: boolean;
   search: string;
   onSearch: (next: string) => void;
-  lang: string;
-  onLang: (next: string) => void;
+  lang: Lang;
+  onLang: (next: Lang) => void;
   onTask: (taskId: string) => void;
 }) {
   const currentMenu = menus.find((m) => m.tasks.some((t) => t.id === currentTaskId))?.id;
@@ -59,7 +59,10 @@ export function SettingsNav({
           label="Settings language"
           items={LANGS}
           value={lang}
-          onValueChange={onLang}
+          onValueChange={(next) => {
+            const parsed = LangSchema.safeParse(next);
+            if (parsed.success) onLang(parsed.data);
+          }}
         />
       </div>
       <Accordion

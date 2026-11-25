@@ -8,12 +8,17 @@ import { Banner } from "@/shared/ui/banner";
 import { Card } from "@/shared/ui/card";
 
 import { OptionRow } from "./option-row";
+import { firstIssue, MaxRestartsInput, StallMinutesInput } from "./policy-input";
 import { recoveryQuery } from "./queries";
 
 export function RecoveryControls({ status }: { status: InstanceStatus }) {
   const qc = useQueryClient();
   const recovery = useQuery(recoveryQuery());
   const [stallDraft, setStallDraft] = useState<string | null>(null);
+  const [inputError, setInputError] = useState<{ stall: string | null; max: string | null }>({
+    stall: null,
+    max: null,
+  });
   const policy = status.health?.recovery.policy;
   const stallMinutes = stallDraft ?? String(policy?.stallMinutes ?? "");
   const global = recovery.data?.policy;
@@ -87,19 +92,25 @@ export function RecoveryControls({ status }: { status: InstanceStatus }) {
               value={stallMinutes}
               disabled={update.isPending}
               onValueChange={setStallDraft}
+              aria-invalid={inputError.stall ? true : undefined}
+              aria-describedby={inputError.stall ? "r-stall-min-error" : undefined}
               onBlur={() => {
-                const n = Number(stallMinutes);
-                if (
-                  stallMinutes.trim() &&
-                  Number.isInteger(n) &&
-                  n >= 0 &&
-                  n <= 1440 &&
-                  n !== policy.stallMinutes
-                )
-                  update.mutate({ stallMinutes: n });
+                const parsed = StallMinutesInput.safeParse(stallMinutes);
+                if (!parsed.success) {
+                  setInputError((old) => ({ ...old, stall: firstIssue(parsed.error) }));
+                  return;
+                }
+                setInputError((old) => ({ ...old, stall: null }));
+                if (parsed.data !== policy.stallMinutes)
+                  update.mutate({ stallMinutes: parsed.data });
                 setStallDraft(null);
               }}
             />
+            {inputError.stall && (
+              <p id="r-stall-min-error" role="alert" className="col-span-full text-xs text-bad">
+                {inputError.stall}
+              </p>
+            )}
           </OptionRow>
         </>
       ) : (
@@ -121,18 +132,24 @@ export function RecoveryControls({ status }: { status: InstanceStatus }) {
             key={global.maxRestartsPerHour}
             defaultValue={String(global.maxRestartsPerHour)}
             disabled={updateGlobal.isPending || recovery.isError}
+            aria-invalid={inputError.max ? true : undefined}
+            aria-describedby={inputError.max ? "r-max-error" : undefined}
             onBlur={(e) => {
-              const n = Number(e.target.value);
-              if (
-                e.target.value.trim() &&
-                Number.isInteger(n) &&
-                n >= 0 &&
-                n <= 60 &&
-                n !== global.maxRestartsPerHour
-              )
-                updateGlobal.mutate({ maxRestartsPerHour: n });
+              const parsed = MaxRestartsInput.safeParse(e.target.value);
+              if (!parsed.success) {
+                setInputError((old) => ({ ...old, max: firstIssue(parsed.error) }));
+                return;
+              }
+              setInputError((old) => ({ ...old, max: null }));
+              if (parsed.data !== global.maxRestartsPerHour)
+                updateGlobal.mutate({ maxRestartsPerHour: parsed.data });
             }}
           />
+          {inputError.max && (
+            <p id="r-max-error" role="alert" className="col-span-full text-xs text-bad">
+              {inputError.max}
+            </p>
+          )}
         </OptionRow>
       )}
       {(update.error || updateGlobal.error) && (
