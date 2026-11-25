@@ -71,13 +71,17 @@ upstream/master ──► master (fork mirror, untouched)
 - Slice branch name: `modernize/<slice-id-lowercase-with-dash>-<slug>`, e.g. `modernize/p1-2-lifecycle-lock`.
 - Commit style follows upstream: `Add: ...`, `Fix: ...`, `Upd: ...`, `Doc: ...`, `Test: ...`.
 - Every slice must leave the legacy PyWebIO GUI working.
-- **Every slice ships implementation and documentation together**, on the same branch. A code slice
-  updates the doc it affects (`lifecycle.md` for P1, `api.md` P2, `events.md` P3, `dashboard/README.md`
-  P4, `config.md` P5, `recovery.md` P6, `operations.md` P7): what changed, how to use it, which
-  invariants and defects it closes. When a slice fixes an item listed in a doc's open findings, it
-  marks that item resolved there. No doc-only slices: analysis slices also ship the code their
-  findings justify (or a test or tool that captures the evidence). P1.1 landed before this rule, as the
-  doc-only spec for P1.2–P1.4.
+- **Doc first, then implement.** Each phase P1–P7 has a spec doc: `lifecycle.md` (P1), `api.md`
+  (P2), `events.md` (P3), `dashboard.md` (P4), `config.md` (P5), `recovery.md` (P6),
+  `operations.md` (P7), all under `doc/modernization/`. If the doc exists, the phase's slices go
+  straight to implementation against it. If not, a **discovery slice `Pn.0`** maps the current
+  code and writes the doc (current state with file:line, data and caller maps, defects,
+  invariants and contract, per-slice notes, open questions), and it lands before any `Pn.N`
+  implementation slice. P1.1 was P1's discovery. P0 is discovery by nature: its doc,
+  `baseline.md`, comes from the soak data in P0.3.
+- **Implementation slices keep the spec current**: each one updates its phase doc on the same
+  branch (what changed, how to use it, which invariants and defects it closes) and marks resolved
+  any open finding it fixes.
 - GPL-3.0 obligations apply if the modified build is distributed.
 
 ### Verification commands (used by the workflows)
@@ -171,9 +175,11 @@ Exit: repeated connect/disconnect and sustained log production show no unbounded
 
 ### P6 — Reliability and recovery (6–12h)
 
+P6.0 discovery (`recovery.md`) audits F11 plus the device reconnect and emulator restart paths in `module/device/`, maps them to the failure table below, and marks the gaps P0 confirmed.
+
 | Slice | Kind | Scope | Done when |
 |-------|------|-------|-----------|
-| P6.1 | code+doc | `doc/modernization/recovery.md`: audit of F11 plus device reconnect and emulator restart paths in `module/device/`, mapped to the failure table below, with gaps confirmed by P0 marked. Implement `GET /api/v1/health/details` with the signals the audit shows are missing: server liveness, worker liveness, progress (last log/activity age vs current task), scheduler idle vs stuck, SyncManager alive. | Gap list in the doc; health tests with a fake clock. |
+| P6.1 | code+doc | Implement `GET /api/v1/health/details` with the signals the P6.0 audit in `recovery.md` shows are missing: server liveness, worker liveness, progress (last log/activity age vs current task), scheduler idle vs stuck, SyncManager alive. | Health tests with a fake clock; `recovery.md` updated. |
 | P6.2 | code+doc | In-memory metrics (uptime, task successes/failures, worker restarts, SSE reconnects) exposed in health details; document each metric in `recovery.md`. | Tests with fake clock. |
 | P6.3 | code | Opt-in supervisor (deploy flag, per instance): restart on unexpected worker exit with bounded backoff (e.g. 3 per hour), never after `RequestHumanTakeover` or deliberate stop; stop and report after repeated failures. Only if P0/P6.1 show worker crashes. | Fault-injection tests: kill worker → failed → restart → gives up after limit. |
 | P6.4 | code | Diagnostics page (health details, metrics, recent errors). | Playwright smoke. |
