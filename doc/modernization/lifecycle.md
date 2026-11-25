@@ -330,3 +330,29 @@ tests, each using a pipe-based handshake so the interleaving is forced, not time
 5. **Daemon/tool stop event (P1.2)**: pass `updater.event` (or a per-instance event) from
    `app.py:689` too? It is a one-token upstream edit; defer unless P1.2 needs it.
 6. **SyncManager health (P3/P6)**: detect a dead manager and recreate it. P0.3 decides the priority.
+
+## 8. Open review findings handed to P1.2 / P1.4
+
+Recorded from the third independent review of this map (alas-slice run 7e171294). These are
+design requirements for P1.2/P1.4, not errors in the map above. The P1.2 and P1.4 designs must
+address each one or state why it does not apply.
+
+### Required by the implementation (reviewer: important)
+
+1. (ref line 191) Define instance identity before locking. On a default case-insensitive Windows filesystem, --run ALAS and the PyWebIO entry for alas.json resolve to the same config through module/config/utils.py:58–62, but the proposed name-keyed registry gives them different managers and locks. Both can launch and write the same config. Resolve supported aliases to a canonical config identity for the registry and PID records, and test startup versus a GUI start with case-variant names.
+2. (ref line 193) The stop sequence ends in an untimed join(), while line 217 promises a bounded call from PyWebIO and uvicorn shutdown. When a final wait does not confirm exit, shutdown can hang indefinitely, including on Starlette’s lifespan event loop. Define a bounded failure path that retains the handle and ownership and blocks replacement or reload until exit is confirmed.
+3. (ref line 198) Specify how a fresh Windows server recognizes and handles a registered orphan. CPython 3.7 Windows spawn uses a generic spawn_main command line without the ALAS target or instance name, and multiprocessing.Process.join() only accepts the current owner's children. A cmdline-only check can miss a live orphan and allow a duplicate. Require reconciliation under the owner lock before auto-run, use the trusted registration and process creation time to identify it, and define an adopt-or-kill path that confirms exit through a handle usable by the new owner. [CPython Windows spawn](https://github.com/python/cpython/blob/v3.7.17/Lib/multiprocessing/popen_spawn_win32.py) [CPython Process.join](https://github.com/python/cpython/blob/v3.7.17/Lib/multiprocessing/process.py#L125-L134)
+4. (ref line 198) The crash test expects the dedicated unregistered exit code even when the owner dies immediately after Process.start(). On Windows the child can still be in spawn_main, which opens the parent process to obtain the bootstrap pipe before the worker wrapper runs. It can exit from bootstrap without publishing that code. Use a child-ready handshake when testing the wrapper's code and a separate early-crash test that only requires no target work and confirmed child exit. [CPython spawn bootstrap](https://github.com/python/cpython/blob/v3.7.17/Lib/multiprocessing/spawn.py#L89-L109)
+5. (ref line 198) The fallback that blocks and re-arms the timer from clearup() still leaves the original 2-second timer active. With a slow stop, that timer can fire while cleanup waits and the supervisor can kill the owner with a worker still alive. Require the proposed reorder or an explicit acknowledgement the supervisor must receive before killing the owner.
+6. (ref line 235) A deadline between SyncManager queue reads cannot bound an in-flight proxy call. If the manager stops responding with its connection open, get(timeout=...) still waits in the proxy's untimed recv(). The drainer can outlive both its deadline and the next run's stop signal. Specify a transport or read path that can actually time out, and test an unresponsive manager as well as a full queue. [CPython manager proxy](https://github.com/python/cpython/blob/v3.7.17/Lib/multiprocessing/managers.py#L739-L752)
+7. (ref line 287) The unconditional stop_requested override can hide a crash that happened before the stop. If the process crashes and the stop callback acquires the instance lock before the exit watcher, the callback records intentional stop and the watcher publishes inactive. Reconcile an already-exited process before recording stop intent, and test a crash with delayed watcher publication followed by stop.
+
+### Existing behaviour to document and test (reviewer: pre-existing)
+
+1. (ref line 94) Cancel does not restart every previously running instance as the map says. If a worker has already read the update event as true but has yet to exit, the cancel path clears the event and start() sees a live process and does nothing. That worker then exits and stays stopped. The pinned restart_processes reproduced this with a fake manager. Document the gap and distinguish the adapter's current start-only behavior from the recovery behavior required of it.
+2. (ref line 214) The updater's one-time snapshot also misses any worker started after the snapshot, including a daemon/tool run that never sees updater.event. The updater can replace code while that worker runs. Document this race separately from the stopping-state filter and assign a test that starts a worker after capture, before update() begins.
+3. (ref line 73) The front-trim rule alone does not preserve the GUI's log stream. At a list length of 400, a burst of 80 appends and one 80-item trim can leave the same length at the next poll. The pinned widget then emits none of those records. Document the length-cursor limitation so an implementation does not treat preserving the trim size as proof of log delivery.
+
+### Nits
+
+- (ref line 28) config/reloadalas stores config names to restart, so it is not an exception to the absence of a persisted PID registry. Clarify the distinction here.
