@@ -288,8 +288,13 @@ def test_classify_electron_mumu_and_exclusions():
         snap(8, 0, 'python.exe', ['python.exe', 'gui.py'], 907.0),
         snap(9, 0, 'adb.exe', ['adb.exe'], 908.0),
         snap(10, 0, 'notepad.exe', ['notepad.exe'], 909.0),
+        # MuMu 12: the VM runs as MuMuNxDevice.exe
+        snap(11, 0, 'MuMuNxDevice.exe', ['MuMuNxDevice.exe'], 910.0),
+        snap(12, 0, 'MuMuNxMain.exe', ['MuMuNxMain.exe'], 911.0),
     ]
     roles = classify(snaps, 22267, extra_patterns=['adb*.exe'], pinned=[10], self_pid=8)
+    assert roles[11] == ('mumu', '', '')
+    assert roles[12] == ('mumu', '', '')
     assert roles[1] == ('electron_main', '', '')
     assert roles[2] == ('electron_renderer', '', '')
     assert roles[3] == ('electron_other', 'gpu-process', '')

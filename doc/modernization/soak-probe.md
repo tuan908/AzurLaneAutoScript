@@ -46,7 +46,7 @@ t3 workflow start alas-soak --key soak/p0-a --input \
 | `--insecure` | off | skip TLS verification (WebuiSSL) |
 | `--handle-timeout` | 5 | deadline of the open-files helper process (s) |
 | `--electron-name` | `alas.exe`, `electron.exe` | Electron process names (repeatable) |
-| `--mumu-pattern` | `MuMuPlayer*`, `MuMuVMMHeadless*` | MuMu name patterns (repeatable) |
+| `--mumu-pattern` | `MuMuPlayer*`, `MuMuVMMHeadless*`, `MuMuNx*` | MuMu name patterns (repeatable; MuMu 12 runs the VM as `MuMuNxDevice.exe`) |
 | `--extra-pattern`, `--pid` | none | extra processes to watch, e.g. `adb*.exe` |
 | `--log-window-hours`, `--log-limit` | 48, 10 | which `log/*.txt` files are reported |
 | `--alas-root` | parent of `dev_tools` | ALAS folder |

@@ -99,7 +99,7 @@ REMEMBERED_ROLES = ('server', 'sync_manager', 'worker')
 ORPHAN_ROLES = REMEMBERED_ROLES + ('unknown',)
 
 DEFAULT_ELECTRON_NAMES = ('alas.exe', 'electron.exe')
-DEFAULT_MUMU_PATTERNS = ('MuMuPlayer*', 'MuMuVMMHeadless*')
+DEFAULT_MUMU_PATTERNS = ('MuMuPlayer*', 'MuMuVMMHeadless*', 'MuMuNx*')
 DEFAULT_HOST = '127.0.0.1'
 DEFAULT_PORT = 22267
 # Long options of gui.py, for argparse-style prefix matching
@@ -1470,7 +1470,7 @@ def parse_args(argv=None):
     parser.add_argument('--electron-name', action='append', default=None,
                         help='Electron process name, repeatable, default: alas.exe, electron.exe')
     parser.add_argument('--mumu-pattern', action='append', default=None,
-                        help='MuMu process name pattern, repeatable, default: MuMuPlayer*, MuMuVMMHeadless*')
+                        help='MuMu process name pattern, repeatable, default: MuMuPlayer*, MuMuVMMHeadless*, MuMuNx* (MuMu 12: MuMuNxDevice is the VM)')
     parser.add_argument('--extra-pattern', action='append', default=[],
                         help='Other process name pattern to watch, repeatable, e.g. adb*.exe')
     parser.add_argument('--pid', action='append', type=int, default=[], help='Watch this pid, repeatable')
