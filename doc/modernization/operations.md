@@ -1,18 +1,22 @@
 # Run the control server on Windows
 
-Stop the Windows ALAS launcher before updating the installation. From the repository root
-in WSL, run the sync script with Git, Bun and rsync installed:
+From the repository root in WSL, run the sync script with Git, Bun and rsync installed:
 
 ```sh
 bash deploy/Windows/sync-from-wsl.sh
 ```
 
-It builds the dashboard and syncs tracked source files to `D:\alas-modernize`. Pass an
-alternate WSL path such as `/mnt/d/AnotherAlas` to update a different installation. Replaced
-files are backed up beside the installation. Local configuration, logs, toolkit and Git
-metadata are preserved. Files deleted from source stay in the target.
+It builds the dashboard, records and stops running profiles, and syncs tracked source
+files to `D:\alas-modernize`. It then starts the server with `start-control.vbs` and
+resumes the same profiles. Automatic restart requires the installed Windows toolkit
+and a local control API without a password.
 
-Double-click `start-control.vbs` in File Explorer to launch it without a console window.
+Pass an alternate WSL path such as `/mnt/d/AnotherAlas` to update a different installation.
+Pass the control port as the second argument if that installation uses a port other than
+22267. Replaced files are backed up beside the installation. Local configuration, logs,
+toolkit and Git metadata are preserved. Files deleted from source stay in the target.
+
+For a manual launch, double-click `start-control.vbs` in File Explorer.
 Startup output goes to `log/control-launch.log`.
 
 Open [ALAS Control Center](http://127.0.0.1:22267/dashboard/). The batch file builds missing
