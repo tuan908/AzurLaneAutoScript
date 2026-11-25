@@ -16,6 +16,18 @@ export default defineConfig({
   base: "/dashboard/",
   plugins: [react(), babel({ presets: [reactCompilerPreset()] }), tailwindcss()],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          // zod/compile installs its compiler when this chunk evaluates. Every chunk that builds
+          // schemas imports it, so ESM order runs the install before any schema is constructed,
+          // wherever the bundler places the schema modules.
+          groups: [{ name: "zod", test: /[\\/]node_modules[\\/]zod[\\/]/ }],
+        },
+      },
+    },
+  },
   server: {
     proxy: {
       "/api": {
