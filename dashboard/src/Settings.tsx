@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ApiError, api, type ConfigField, type ConfigTask, type ConfigValue } from "./api";
 
 const LANGS = ["en-US", "zh-CN", "zh-TW", "ja-JP"];
@@ -92,6 +92,7 @@ export function Settings({ id }: { id: string }) {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [edits, setEdits] = useState<Record<string, ConfigValue>>({});
+  const editRevision = useRef<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
@@ -114,7 +115,7 @@ export function Settings({ id }: { id: string }) {
   }, [search, tasks]);
 
   const save = useMutation({
-    mutationFn: () => api.updateConfig(id, doc.data!.revision, edits),
+    mutationFn: () => api.updateConfig(id, editRevision.current!, edits),
     onSuccess: (result) => {
       setEdits({});
       setErrors({});
@@ -146,6 +147,7 @@ export function Settings({ id }: { id: string }) {
     field.path in edits ? edits[field.path] : deepGet(doc.data?.config, field.path);
 
   const change = (field: ConfigField, v: ConfigValue) => {
+    if (!Object.keys(edits).length) editRevision.current = doc.data!.revision;
     setNotice(null);
     setEdits((old) => {
       const next = { ...old };
@@ -166,6 +168,9 @@ export function Settings({ id }: { id: string }) {
   if (schema.isError) {
     return <div className="card error">{(schema.error as Error).message}</div>;
   }
+  if (doc.isError && !doc.data) {
+    return <div className="card error" role="alert">{doc.error.message}</div>;
+  }
   if (!schema.data || !doc.data) return <div className="card muted">Loading settings…</div>;
 
   const editCount = Object.keys(edits).length;
@@ -183,8 +188,8 @@ export function Settings({ id }: { id: string }) {
   return (
     <div className="settings">
       <aside className="settings-nav card">
-        <input placeholder="Search settings" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select value={lang} onChange={(e) => setLang(e.target.value)}>
+        <input aria-label="Search settings" placeholder="Search settings" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select aria-label="Settings language" value={lang} onChange={(e) => setLang(e.target.value)}>
           {LANGS.map((l) => (
             <option key={l}>{l}</option>
           ))}

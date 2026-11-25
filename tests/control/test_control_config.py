@@ -97,6 +97,15 @@ def test_read_has_revision_and_config(files):
 
 def test_update_applies_and_keeps_unknown_keys(files):
     service = make_service(files)
+    # The real ConfigUpdater rebuilds the parsed document from metadata.
+    parsed = service._read_config
+
+    def known_settings(name):
+        config = parsed(name)
+        config.pop("Custom", None)
+        return config
+
+    service._read_config = known_settings
     revision = service.read("alas")["revision"]
     result = service.update("alas", revision, {
         "Alas.Emulator.Serial": "127.0.0.1:16384",
@@ -110,7 +119,8 @@ def test_update_applies_and_keeps_unknown_keys(files):
     assert saved["Alas"]["Emulator"]["ScreenshotDedithering"] is True
     assert saved["Alas"]["Emulator"]["PackageName"] == "com.YoStarEN.AzurLane"
     assert saved["Commission"]["Scheduler"]["NextRun"] == "2026-11-25 08:30:00"
-    assert saved["Custom"] == {"Unknown": {"Key": 42}}
+    with open(files["alas"], encoding="utf-8") as stored:
+        assert json.load(stored)["Custom"] == {"Unknown": {"Key": 42}}
 
 
 def test_update_numbers_like_the_gui(files):
@@ -227,6 +237,7 @@ def test_http_schema_and_read(client):
     assert client.get("/api/v1/instances/alas/config/schema?lang=../x").status_code == 400
     assert client.get("/api/v1/instances/nope/config").status_code == 404
     assert "revision" in client.get("/api/v1/instances/alas/config").json()
+    assert client.get("/api/v1/config/schema").json()["menus"]
 
 
 def test_http_patch_flow(client):

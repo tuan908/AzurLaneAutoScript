@@ -76,6 +76,18 @@ class InstanceService:
         manager.restart(self._default_func(instance_id), self._stop_event())
         return self._status(manager)
 
+    def recover(self, expected: dict, reason: str) -> Optional[dict]:
+        instance_id = expected["id"]
+        manager = self._manager(instance_id)
+        with manager.lock:
+            current = manager.status()
+            signals = ("revision", "state", "currentTask", "lastActivityAt", "unmanaged")
+            if any(current.get(key) != expected.get(key) for key in signals):
+                return None
+            command = manager.restart if reason == "stalled" else manager.start
+            command(self._default_func(instance_id), self._stop_event())
+            return self._status(manager)
+
     def logs(self, instance_id: str, after: int = 0, limit: int = 500) -> dict:
         return self._manager(instance_id).log_since(after, limit)
 
@@ -84,10 +96,16 @@ class InstanceService:
         if self._tasks is None:
             return {"running": [], "pending": [], "waiting": []}
         queue = self._tasks(instance_id)
-        # Same rule as the GUI overview: the first pending task is the running one
         pending = list(queue.get("pending", []))
-        running = pending[:1] if manager.alive else []
-        return {"running": running, "pending": pending[len(running):], "waiting": list(queue.get("waiting", []))}
+        waiting = list(queue.get("waiting", []))
+        current = manager.current_task if manager.alive else None
+        running = []
+        if current:
+            running = [next((task for task in pending + waiting if task["command"] == current),
+                            {"command": current, "nextRun": None})]
+            pending = [task for task in pending if task["command"] != current]
+            waiting = [task for task in waiting if task["command"] != current]
+        return {"running": running, "pending": pending, "waiting": waiting}
 
     def running_count(self) -> int:
         return sum(1 for status in self.list_instances() if status["state"] in ("starting", "running", "stopping"))

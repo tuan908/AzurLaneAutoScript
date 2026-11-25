@@ -164,6 +164,16 @@ input {
 }
 .instance-name {
   font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.profile-form, .profile-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.profile-form :is(input, select) {
+  width: 100%;
 }
 
 .badge {
@@ -282,7 +292,13 @@ input {
   font-size: 12px;
   line-height: 1.45;
 }
+.log-lines {
+  position: relative;
+}
 .log-line {
+  position: absolute;
+  top: 0;
+  width: 100%;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -318,6 +334,7 @@ input {
 
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 select,

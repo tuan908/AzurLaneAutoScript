@@ -12,7 +12,7 @@ from module.config.config_manual import ManualConfig, OutputConfig
 from module.config.config_updater import ConfigUpdater, ensure_time, get_server_next_update, nearest_future
 from module.config.deep import deep_get, deep_set
 from module.config.lock import config_lock
-from module.config.utils import DEFAULT_TIME, dict_to_kv, filepath_config, get_os_reset_remain, path_to_arg
+from module.config.utils import DEFAULT_TIME, dict_to_kv, filepath_config, get_os_reset_remain, path_to_arg, read_file
 from module.config.watcher import ConfigWatcher
 from module.exception import RequestHumanTakeover, ScriptError
 from module.logger import logger
@@ -278,22 +278,26 @@ class AzurLaneConfig(ConfigUpdater, ManualConfig, GeneratedConfig, ConfigWatcher
         if not self.modified:
             return False
 
-        with config_lock(self.config_name, mod_name):
+        with config_lock(self.config_name, mod_name, required=True):
             if mod_name == 'alas' and getattr(self, '_loaded_stamp', None) != self._file_stamp():
                 # The file was written by someone else (GUI, control API) since our last load:
                 # re-read it, so only our own modifications are applied on top of their edits.
                 logger.info('Config changed on disk since last load, merging')
                 self.load()
 
+            disk = read_file(filepath_config(self.config_name)) if mod_name == 'alas' else {}
+            output = disk or self.data
             for path, value in self.modified.items():
                 deep_set(self.data, keys=path, value=value)
+                if disk:
+                    deep_set(output, keys=path, value=value)
 
             logger.info(
-                f"Save config {filepath_config(self.config_name, mod_name)}, {dict_to_kv(self.modified)}"
+                f"Save config {filepath_config(self.config_name, mod_name)} ({len(self.modified)} values)"
             )
+            self.write_file(self.config_name, data=output)
             # Don't use self.modified = {}, that will create a new object.
             self.modified.clear()
-            self.write_file(self.config_name, data=self.data)
             self._loaded_stamp = self._file_stamp()
 
     def update(self):

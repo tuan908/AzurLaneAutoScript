@@ -128,7 +128,10 @@ def test_api_returns_503_while_locked(other_process, tmp_path):
             await app(scope, receive, send)
 
     client = TestClient(AsLoopback(), base_url="http://127.0.0.1:22267")
-    revision = client.get("/api/v1/instances/alas/config").json()["revision"]
+    from hashlib import sha256
+
+    assert client.get("/api/v1/instances/alas/config").status_code == 503
+    revision = sha256(path.read_bytes()).hexdigest()[:16]
     body = {"revision": revision, "changes": {"Alas.Emulator.Serial": "x:1"}}
     busy = client.patch("/api/v1/instances/alas/config", json=body)
     assert busy.status_code == 503

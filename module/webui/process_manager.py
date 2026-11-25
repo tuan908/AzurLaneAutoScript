@@ -6,10 +6,11 @@ import re
 import threading
 import time
 from datetime import datetime, timezone
-from multiprocessing import Process
+from multiprocessing import Process, RawValue
 from typing import Dict, List, Optional, Union
 
 import inflection
+from filelock import FileLock, Timeout
 from rich.console import Console, ConsoleRenderable
 
 # Since this file does not run under the same process or subprocess of app.py
@@ -20,6 +21,7 @@ from module.webui.fake_pil_module import *
 import_fake_pil_module()
 
 from module.logger import logger, set_file_logger, set_func_logger
+from module.exception import HUMAN_TAKEOVER_EXIT_CODE, RequestHumanTakeover
 from module.submodule.submodule import load_mod
 from module.submodule.utils import get_available_func, get_available_mod, get_available_mod_func, get_config_mod, \
     get_func_mod, list_mod_instance
@@ -31,6 +33,40 @@ _TASK_END = "Scheduler: End task"
 # Plain-text log tail kept per instance for the API (the renderables list stays for PyWebIO)
 LOG_TAIL_LINES = 2000
 LOG_LINE_MAX_CHARS = 16 * 1024
+WORKER_LOCK_DIR = "./config/tmp/workers"
+LOG_QUEUE_SIZE = 256
+
+
+def _run_owned_worker(lock_path, target, args):
+    lock = FileLock(lock_path)
+    try:
+        lock.acquire(timeout=0)
+    except Timeout:
+        return
+    try:
+        target(*args)
+    finally:
+        lock.release()
+
+
+class _WorkerStop:
+    def __init__(self, update_event):
+        self.update_event = update_event
+        self.requested = RawValue("b", False)
+
+    def set(self):
+        self.requested.value = True
+
+    def is_set(self):
+        return bool(self.requested.value or (self.update_event and self.update_event.is_set()))
+
+    def wait(self, timeout=None):
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while not self.is_set():
+            if deadline is not None and time.monotonic() >= deadline:
+                return False
+            time.sleep(0.05)
+        return True
 
 
 def _iso(timestamp: Optional[float]) -> Optional[str]:
@@ -43,16 +79,21 @@ class ProcessManager:
     _processes: Dict[str, "ProcessManager"] = {}
     # Guards _processes, so concurrent get_manager() calls never create two managers
     _registry_lock = threading.Lock()
+    _worker_lock_guard = threading.Lock()
     # Seconds to wait for a killed worker to be reaped
     stop_join_timeout = 10.0
+    graceful_stop_timeout = 1.0
 
     def __init__(self, config_name: str = "alas") -> None:
         self.config_name = config_name
-        self._renderable_queue: queue.Queue[ConsoleRenderable] = State.manager.Queue()
+        self._renderable_queue: queue.Queue[ConsoleRenderable] = State.manager.Queue(LOG_QUEUE_SIZE)
+        os.makedirs(WORKER_LOCK_DIR, exist_ok=True)
+        self._worker_lock_path = os.path.abspath(os.path.join(WORKER_LOCK_DIR, f"{config_name}.lock"))
         self.renderables: List[ConsoleRenderable] = []
         self.renderables_max_length = 400
         self.renderables_reduce_length = 80
         self._process: Process = None
+        self._stop_signal = None
         self.thd_log_queue_handler: threading.Thread = None
         # Serialises start / stop / restart of this instance. Re-entrant, so restart
         # can hold it across its stop and start.
@@ -69,6 +110,9 @@ class ProcessManager:
         self._text_console = Console(no_color=True, width=200)
         self.log_tail = collections.deque(maxlen=LOG_TAIL_LINES)
         self.log_seq = 0
+        self._log_lock = threading.Lock()
+        self.task_successes = 0
+        self.task_failures = 0
         # log_seq when the current run started: lines after it belong to this run
         self.run_log_start_seq = 0
 
@@ -80,23 +124,24 @@ class ProcessManager:
             bool: If a new worker was started.
         """
         with self.lock:
-            if self.alive:
+            if self.alive or self._worker_elsewhere():
                 return False
+            if self.thd_log_queue_handler is not None:
+                self.thd_log_queue_handler.join(timeout=1)
             if func is None:
                 func = get_config_mod(self.config_name)
             self._transition = "starting"
             try:
+                self._stop_signal = _WorkerStop(ev)
                 self._process = Process(
-                    target=ProcessManager.run_process,
-                    args=(
-                        self.config_name,
-                        func,
-                        self._renderable_queue,
-                        ev,
-                    ),
+                    target=_run_owned_worker,
+                    args=(self._worker_lock_path, ProcessManager.run_process,
+                          (self.config_name, func, self._renderable_queue, self._stop_signal)),
                 )
                 self.run_log_start_seq = self.log_seq
-                self._process.start()
+                # A forked worker must not inherit another thread's probe lock.
+                with self._worker_lock_guard:
+                    self._process.start()
                 self._stop_requested = False
                 self._exit_observed = False
                 self.started_at = time.time()
@@ -115,25 +160,32 @@ class ProcessManager:
         ):
             return
         self.thd_log_queue_handler = threading.Thread(
-            target=self._thread_log_queue_handler
+            target=self._thread_log_queue_handler, daemon=True
         )
         self.thd_log_queue_handler.start()
 
     def stop(self) -> bool:
         """
-        Kill the worker and wait until it has exited.
+        Request a graceful stop, then terminate if the worker is still running.
 
         Returns:
             bool: If no worker is running afterwards.
         """
         with self.lock:
-            if self.alive:
+            was_alive = self.alive
+            if was_alive:
                 self._transition = "stopping"
                 self._stop_requested = True
                 self.revision += 1
                 try:
-                    self._process.kill()
-                    self._process.join(timeout=self.stop_join_timeout)
+                    self._stop_signal.set()
+                    self._process.join(timeout=self.graceful_stop_timeout)
+                    if self._process.is_alive():
+                        self._process.terminate()
+                        self._process.join(timeout=1)
+                    if self._process.is_alive():
+                        self._process.kill()
+                        self._process.join(timeout=self.stop_join_timeout)
                 finally:
                     self._transition = None
                 if self._process.is_alive():
@@ -141,10 +193,10 @@ class ProcessManager:
                         f"[{self.config_name}] still alive {self.stop_join_timeout}s after kill"
                     )
                 else:
-                    line = f"[{self.config_name}] exited. Reason: Manual stop\n"
-                    self.renderables.append(line)
-                    self._append_text(line)
                     self._observe_exit()
+            elif self._process is not None and not self._stop_requested:
+                self._stop_requested = True
+                self.revision += 1
             if self.thd_log_queue_handler is not None:
                 self.thd_log_queue_handler.join(timeout=1)
                 if self.thd_log_queue_handler.is_alive():
@@ -152,8 +204,19 @@ class ProcessManager:
                         "Log queue handler thread does not stop within 1 seconds"
                     )
             stopped = not self.alive
+            if stopped and was_alive:
+                line = f"[{self.config_name}] exited. Reason: Manual stop\n"
+                self.renderables.append(line)
+                self._append_text(line)
         logger.info(f"[{self.config_name}] exited")
-        return stopped
+        return stopped and not self._worker_elsewhere()
+
+    def _worker_elsewhere(self) -> bool:
+        try:
+            with self._worker_lock_guard, FileLock(self._worker_lock_path).acquire(timeout=0):
+                return False
+        except Timeout:
+            return True
 
     def restart(self, func, ev: threading.Event = None) -> bool:
         """
@@ -175,11 +238,15 @@ class ProcessManager:
             self.revision += 1
 
     def _thread_log_queue_handler(self) -> None:
-        while self.alive:
+        while True:
             try:
-                log = self._renderable_queue.get(timeout=1)
+                log = self._renderable_queue.get(timeout=0.25) if self.alive else self._renderable_queue.get_nowait()
             except queue.Empty:
+                if not self.alive:
+                    break
                 continue
+            except (EOFError, OSError):
+                break
             self.renderables.append(log)
             self._track_activity(log)
             if len(self.renderables) > self.renderables_max_length:
@@ -203,23 +270,32 @@ class ProcessManager:
             self.current_task = match.group(1)
         elif _TASK_END in text:
             self.current_task = None
+            with self._log_lock:
+                if text.rstrip().endswith("[success]"):
+                    self.task_successes += 1
+                elif text.rstrip().endswith("[failure]"):
+                    self.task_failures += 1
 
     def _append_text(self, text: str) -> None:
         text = text.rstrip("\n")
-        if len(text) > LOG_LINE_MAX_CHARS:
-            text = text[:LOG_LINE_MAX_CHARS] + " …(truncated)"
-        self.log_seq += 1
-        self.log_tail.append((self.log_seq, text))
+        encoded = text.encode("utf-8", errors="replace")
+        if len(encoded) > LOG_LINE_MAX_CHARS:
+            text = encoded[:LOG_LINE_MAX_CHARS - 3].decode("utf-8", errors="ignore") + "…"
+        with self._log_lock:
+            self.log_seq += 1
+            self.log_tail.append((self.log_seq, text))
 
     def log_since(self, after: int = 0, limit: int = 500) -> dict:
         """
         Plain-text log lines with seq > after, oldest first, at most limit of them
         (the newest ones when more are available).
         """
-        lines = [{"seq": seq, "text": text} for seq, text in list(self.log_tail) if seq > after]
-        if limit and len(lines) > limit:
-            lines = lines[-limit:]
-        return {"lines": lines, "lastSeq": self.log_seq}
+        with self._log_lock:
+            entries = [(seq, text) for seq, text in self.log_tail if seq > after]
+            last_seq = self.log_seq
+        if limit:
+            entries = entries[-limit:]
+        return {"lines": [{"seq": seq, "text": text} for seq, text in entries], "lastSeq": last_seq}
 
     def status(self) -> dict:
         """
@@ -228,10 +304,12 @@ class ProcessManager:
         """
         process = self._process
         alive = process is not None and process.is_alive()
+        unmanaged = not alive and self._transition is None and self._worker_elsewhere()
         if process is not None and not alive and not self._exit_observed:
             if self.lock.acquire(blocking=False):
                 try:
-                    self._observe_exit()
+                    if self._process is process and not self.alive:
+                        self._observe_exit()
                 finally:
                     self.lock.release()
 
@@ -240,16 +318,15 @@ class ProcessManager:
         last_error = None
         if self._transition is not None:
             state = self._transition
-        elif alive:
+        elif alive or unmanaged:
             state = "running"
+            if unmanaged:
+                last_error = "Worker is owned by an earlier ALAS server or another launcher"
         elif process is None or self._stop_requested:
             state = "stopped"
         elif exit_code not in (0, None):
             state = "failed"
             last_error = f"Worker exited with code {exit_code}"
-        elif legacy_state == 3:
-            state = "failed"
-            last_error = "Worker stopped on an error, see the log"
         else:
             state = "stopped"
 
@@ -266,6 +343,10 @@ class ProcessManager:
             "legacyState": legacy_state,
             "revision": self.revision,
             "runLogStartSeq": self.run_log_start_seq,
+            "logDraining": not alive and bool(self.thd_log_queue_handler and self.thd_log_queue_handler.is_alive()),
+            "unmanaged": unmanaged,
+            "taskSuccesses": self.task_successes,
+            "taskFailures": self.task_failures,
         }
 
     @property
@@ -279,6 +360,8 @@ class ProcessManager:
     def state(self) -> int:
         if self.alive:
             return 1
+        elif self._stop_requested:
+            return 2
         elif len(self.renderables) == 0:
             return 2
         else:
@@ -323,7 +406,14 @@ class ProcessManager:
             logger.info("Electron detected, remove log output to stdout")
             from module.logger import console_hdlr
             logger.removeHandler(console_hdlr)
-        set_func_logger(func=q.put)
+        def publish(log):
+            try:
+                q.put_nowait(log)
+            except (queue.Full, EOFError, OSError):
+                # shortcut: the disk log retains entries lost if the live queue falls behind
+                pass
+
+        set_func_logger(func=publish)
 
         from module.config.config import AzurLaneConfig
 
@@ -354,13 +444,22 @@ class ProcessManager:
             else:
                 logger.critical(f"No function matched: {func}")
             logger.info(f"[{config_name}] exited. Reason: Finish\n")
+        except RequestHumanTakeover:
+            logger.critical("Request human takeover")
+            raise SystemExit(HUMAN_TAKEOVER_EXIT_CODE)
         except Exception as e:
             logger.exception(e)
+            raise SystemExit(1)
+
+    @classmethod
+    def all_managers(cls) -> List["ProcessManager"]:
+        with cls._registry_lock:
+            return list(cls._processes.values())
 
     @classmethod
     def running_instances(cls) -> List["ProcessManager"]:
         l = []
-        for process in cls._processes.values():
+        for process in cls.all_managers():
             if process.alive:
                 l.append(process)
         return l

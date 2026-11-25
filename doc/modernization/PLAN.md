@@ -1,6 +1,6 @@
 # ALAS modernization — implementation plan
 
-Status: draft v1 (2026-11-25). Owner: tuan908.
+Status: first runnable build (2026-11-25). Owner: tuan908.
 Source: the "ALAS modernization plan" proposal, checked against this checkout at `a868d2abe`.
 
 Goal: an automation runtime that stays reliable for 72h+ even when its interface fails,
@@ -8,6 +8,19 @@ with a stable HTTP API and a React dashboard, while staying mergeable with upstr
 
 This file is the single source of truth for the T3 workflows in
 `~/.t3/workflows/alas-modernize.ts`. Agents read it; keep slice IDs stable.
+
+## Implementation status
+
+- P0 has a probe and [baseline status](baseline.md). The root cause and 72-hour baselines
+  remain open.
+- P1 lives in the shared process manager. An OS-held lock per profile prevents duplicate
+  automation after a server exit. A surviving worker appears as unmanaged until it exits.
+- P2–P5 ship the [API](api.md), [live events](events.md), [dashboard](dashboard.md) and
+  [settings editor](config.md). The first build reconciles log tails through REST on
+  reconnect and uses the existing React/CSS form stack.
+- P6 has [health diagnostics and opt-in recovery](recovery.md).
+- P7 includes the [Windows launcher and Task Scheduler script](operations.md). An isolated
+  Windows task was registered and removed. The final live MuMu soak remains open.
 
 ---
 

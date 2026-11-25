@@ -1,7 +1,13 @@
 # ALAS lifecycle ownership map (P1.1)
 
-Status: v3 (2026-11-25, second review fixes). Slice P1.1 of `doc/modernization/PLAN.md`.
+Status: P1.1 caller map with a first-build note. See `doc/modernization/PLAN.md`.
 References were taken at upstream `a868d2abe` (fork `modernize/main` `358f882e4`).
+
+The first build keeps lifecycle in `ProcessManager`. A worker holds an OS-backed per-profile
+lock until it exits, including after a parent crash. A later server reports a busy lock as
+unmanaged and refuses lifecycle commands for that profile. Manual stop requests graceful exit,
+then terminates and joins. Legacy hot reload requests Uvicorn shutdown and joins the server
+before replacing it.
 Every `path:line` below is quoted together with the symbol on that line, so the reference
 can be found again by symbol after an upstream sync moves the lines.
 

@@ -20,8 +20,10 @@ import os
 import re
 import time
 from datetime import datetime, timezone
+from functools import wraps
 from typing import Callable, Dict, Optional
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
@@ -29,7 +31,7 @@ from starlette.responses import JSONResponse, RedirectResponse, StreamingRespons
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from module.control.configuration import ConfigConflict, ConfigInvalid, ConfigService, ConfigUnsupported
+from module.control.configuration import ConfigConflict, ConfigInvalid, ConfigService, ConfigUnsupported, ProfileExists
 from module.control.instances import InstanceService, UnknownInstance
 
 API_PREFIX = "/api/v1"
@@ -41,6 +43,7 @@ DASHBOARD_PREFIX = "/dashboard"
 EVENTS_POLL_SECONDS = 0.5
 EVENTS_HEARTBEAT_SECONDS = 15.0
 EVENTS_MAX_LINES = 200
+EVENTS_SEND_TIMEOUT_SECONDS = 5.0
 _LOOPBACK_NAMES = ("localhost",)
 
 
@@ -60,6 +63,17 @@ def _host_name(value: str) -> str:
     return urlsplit(f"//{value}").hostname or ""
 
 
+def _same_origin(request: Request, origin: str, host: str) -> bool:
+    try:
+        expected = urlsplit(f"{request.url.scheme}://{host}")
+        supplied = urlsplit(origin)
+        default = 443 if expected.scheme == "https" else 80
+        return (supplied.scheme, supplied.hostname, supplied.port or default) == (
+            expected.scheme, expected.hostname, expected.port or default)
+    except ValueError:
+        return False
+
+
 def _error(status: int, code: str, message: str) -> JSONResponse:
     return JSONResponse({"error": {"code": code, "message": message}}, status_code=status)
 
@@ -72,31 +86,36 @@ class ControlApi:
             health_details: Callable[[], Dict] = dict,
             config: Optional[ConfigService] = None,
             monitor=None,
+            shutting_down: Callable[[], bool] = lambda: False,
     ):
         self.service = service
         self.config = config
         self.monitor = monitor
+        self.shutting_down = shutting_down
         self.password = password or None
         self.health_details = health_details
         self.started_at = time.time()
+        self.stream_id = uuid4().hex
+        self.event_connections = 0
 
     # ------------------------------------------------------------ access
 
     def _refuse(self, request: Request) -> Optional[JSONResponse]:
         host = request.headers.get("host", "")
         origin = request.headers.get("origin")
-        if origin is not None and (origin == "null" or _host_name(urlsplit(origin).netloc) != _host_name(host)):
+        if origin is not None and not _same_origin(request, origin, host):
             return _error(403, "cross_origin", "Cross-site requests are not allowed")
         if self.password is not None:
             scheme, _, token = request.headers.get("authorization", "").partition(" ")
-            if request.method == "GET" and not token:
-                # EventSource cannot send headers
-                scheme, token = "bearer", request.query_params.get("access_token", "")
             if scheme.lower() != "bearer" or not hmac.compare_digest(token.encode(), self.password.encode()):
                 return _error(401, "unauthorized", "Send Authorization: Bearer <password>")
             return None
         client = request.client.host if request.client else None
-        if not _is_loopback(client) or not _is_loopback(_host_name(host)):
+        try:
+            local_host = _is_loopback(_host_name(host))
+        except ValueError:
+            local_host = False
+        if not _is_loopback(client) or not local_host:
             return _error(403, "loopback_only", "Without a password the API only accepts local requests")
         return None
 
@@ -114,6 +133,8 @@ class ControlApi:
             return JSONResponse(body, status_code=400)
         if isinstance(e, ConfigUnsupported):
             return _error(501, "unsupported", str(e))
+        if isinstance(e, ProfileExists):
+            return _error(409, "profile_exists", "A profile with that name already exists")
         if type(e).__name__ == "ConfigLockTimeout":
             return _error(503, "config_busy", "The config is being saved by Alas or the GUI; try again")
         if isinstance(e, ValueError):
@@ -122,6 +143,7 @@ class ControlApi:
 
     def _guarded(self, handler):
         if asyncio.iscoroutinefunction(handler):
+            @wraps(handler)
             async def async_endpoint(request: Request):
                 refused = self._refuse(request)
                 if refused is not None:
@@ -135,6 +157,7 @@ class ControlApi:
                     return mapped
             return async_endpoint
 
+        @wraps(handler)
         def endpoint(request: Request):
             refused = self._refuse(request)
             if refused is not None:
@@ -151,6 +174,17 @@ class ControlApi:
     # ------------------------------------------------------------ endpoints
 
     def health(self, request: Request) -> JSONResponse:
+        return self._health()
+
+    def openapi(self, request: Request) -> JSONResponse:
+        from module.control.openapi import document
+
+        return JSONResponse(document(self.routes()))
+
+    def health_snapshot(self, request: Request) -> JSONResponse:
+        return self._health(detailed=True)
+
+    def _health(self, detailed=False) -> JSONResponse:
         now = time.time()
         instances = self.service.list_instances()
         body = {
@@ -168,6 +202,14 @@ class ControlApi:
         body.update(self.health_details())
         if self.monitor is not None:
             body["health"] = self.monitor.checks()
+        if detailed:
+            body["metrics"] = {
+                "taskSuccesses": sum(s.get("taskSuccesses", 0) for s in instances),
+                "taskFailures": sum(s.get("taskFailures", 0) for s in instances),
+                "workerRestarts": self.monitor.restart_count if self.monitor is not None else 0,
+                "sseConnections": self.event_connections,
+            }
+            body["instanceDetails"] = instances
         return JSONResponse(body)
 
     def recovery(self, request: Request) -> JSONResponse:
@@ -189,17 +231,42 @@ class ControlApi:
     def get_instance(self, request: Request) -> JSONResponse:
         return JSONResponse(self.service.get_status(request.path_params["instance_id"]))
 
+    async def create_profile(self, request: Request) -> JSONResponse:
+        if not request.headers.get("content-type", "").startswith("application/json"):
+            return _error(415, "unsupported_media_type", "Send Content-Type: application/json")
+        try:
+            body = await request.json()
+        except ValueError:
+            raise ValueError("Body is not valid JSON")
+        if not isinstance(body, dict) or not isinstance(body.get("id"), str):
+            raise ValueError("Provide a profile name")
+        instance_id = body["id"]
+        source = body.get("source")
+        if source is not None:
+            if not isinstance(source, str):
+                raise ValueError("Provide a source profile name")
+            await run_in_threadpool(self.service.require, source)
+        if any(s["id"].casefold() == instance_id.casefold() for s in
+               await run_in_threadpool(self.service.list_instances)) and instance_id != "alas":
+            raise ProfileExists(instance_id)
+        await run_in_threadpool(self.config.create, instance_id, source)
+        return JSONResponse(await run_in_threadpool(self.service.get_status, instance_id), status_code=201)
+
     def start(self, request: Request) -> JSONResponse:
-        return JSONResponse(self.service.start(request.path_params["instance_id"]))
+        return self._command(self.service.start(request.path_params["instance_id"]))
 
     def stop(self, request: Request) -> JSONResponse:
         status = self.service.stop(request.path_params["instance_id"])
-        if status["state"] not in ("stopped", "failed"):
-            return JSONResponse(status, status_code=409)
-        return JSONResponse(status)
+        return self._command(status, conflict=status["state"] not in ("stopped", "failed"))
 
     def restart(self, request: Request) -> JSONResponse:
-        return JSONResponse(self.service.restart(request.path_params["instance_id"]))
+        return self._command(self.service.restart(request.path_params["instance_id"]))
+
+    @staticmethod
+    def _command(status, conflict=False):
+        if status.get("unmanaged") or conflict:
+            return _error(409, "worker_busy", status.get("lastError") or "Worker has not stopped")
+        return JSONResponse(status)
 
     def logs(self, request: Request) -> JSONResponse:
         after = int(request.query_params.get("after", "0"))
@@ -210,8 +277,9 @@ class ControlApi:
         return JSONResponse(self.service.tasks(request.path_params["instance_id"]))
 
     def config_schema(self, request: Request) -> JSONResponse:
-        instance_id = request.path_params["instance_id"]
-        self.service.require(instance_id)
+        instance_id = request.path_params.get("instance_id", "alas")
+        if "instance_id" in request.path_params:
+            self.service.require(instance_id)
         lang = request.query_params.get("lang", "en-US")
         if not re.fullmatch(r"[a-z]{2}-[A-Z]{2}", lang):
             raise ValueError("lang must look like en-US")
@@ -231,9 +299,14 @@ class ControlApi:
             body = await request.json()
         except Exception:
             raise ValueError("Body is not valid JSON")
-        if not isinstance(body, dict) or not isinstance(body.get("revision"), str):
+        revision = request.headers.get("if-match")
+        if revision is not None:
+            revision = revision.strip('"')
+        elif isinstance(body, dict):
+            revision = body.get("revision")
+        if not isinstance(body, dict) or not isinstance(revision, str):
             raise ValueError('Body must be {"revision": "...", "changes": {"Task.Group.Arg": value}}')
-        result = await run_in_threadpool(self.config.update, instance_id, body["revision"], body.get("changes"))
+        result = await run_in_threadpool(self.config.update, instance_id, revision, body.get("changes"))
         return JSONResponse(result)
 
     async def events(self, request: Request):
@@ -247,6 +320,7 @@ class ControlApi:
         if refused is not None:
             return refused
         service = self.service
+        self.event_connections += 1
 
         def sse(event_type: str, data: dict, event_id: Optional[int] = None) -> str:
             head = f"id: {event_id}\n" if event_id is not None else ""
@@ -254,19 +328,29 @@ class ControlApi:
 
         async def stream():
             status_seen = {}
+            initial = await run_in_threadpool(service.list_instances)
             log_seen = {}
+            for status in initial:
+                iid = status["id"]
+                log_seen[iid] = (await run_in_threadpool(service.logs, iid, 0, 1))["lastSeq"]
             event_id = 0
             last_beat = time.time()
             yield "retry: 3000\n\n"
-            while True:
+            yield sse("resync", {"streamId": self.stream_id})
+            while not self.shutting_down():
                 if await request.is_disconnected():
                     break
                 statuses = await run_in_threadpool(service.list_instances)
+                active = {s["id"] for s in statuses}
+                for removed in status_seen.keys() - active:
+                    del status_seen[removed]
+                    log_seen.pop(removed, None)
                 for status in statuses:
                     iid = status["id"]
                     health = status.get("health") or {}
                     recovery = health.get("recovery") or {}
-                    key = (status["revision"], status["state"], status["currentTask"], health.get("state"),
+                    key = (status["revision"], status["state"], status["currentTask"], status.get("unmanaged"),
+                           health.get("state"),
                            health.get("detail") if health.get("state") == "stalled" else None,
                            recovery.get("nextAttemptAt"), recovery.get("gaveUp"), recovery.get("restartsLastHour"),
                            json.dumps(recovery.get("policy"), sort_keys=True))
@@ -276,11 +360,14 @@ class ControlApi:
                         yield sse("instance.status.changed", {"instanceId": iid, "data": status}, event_id)
                     if iid not in log_seen:
                         # Start at the current end; the backlog comes from /logs
-                        log_seen[iid] = service.logs(iid, 0, 1)["lastSeq"]
+                        log_seen[iid] = (await run_in_threadpool(service.logs, iid, 0, 1))["lastSeq"]
                         continue
-                    chunk = service.logs(iid, log_seen[iid], EVENTS_MAX_LINES)
+                    chunk = await run_in_threadpool(service.logs, iid, log_seen[iid], EVENTS_MAX_LINES)
                     if chunk["lines"]:
+                        missed = chunk["lines"][0]["seq"] > log_seen[iid] + 1
                         log_seen[iid] = chunk["lastSeq"]
+                        if missed:
+                            yield sse("resync", {"streamId": self.stream_id})
                         event_id += 1
                         yield sse("log.appended", {"instanceId": iid, "lines": chunk["lines"]}, event_id)
                 now = time.time()
@@ -289,7 +376,7 @@ class ControlApi:
                     yield ": ping\n\n"
                 await asyncio.sleep(EVENTS_POLL_SECONDS)
 
-        return StreamingResponse(stream(), media_type="text/event-stream", headers={
+        return EventStream(stream(), media_type="text/event-stream", headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
         })
@@ -297,7 +384,9 @@ class ControlApi:
     def routes(self):
         g = self._guarded
         return [
+            Route("/openapi.json", g(self.openapi), methods=["GET"]),
             Route("/health", g(self.health), methods=["GET"]),
+            Route("/health/details", g(self.health_snapshot), methods=["GET"]),
             Route("/instances", g(self.list_instances), methods=["GET"]),
             Route("/instances/{instance_id}", g(self.get_instance), methods=["GET"]),
             Route("/instances/{instance_id}/start", g(self.start), methods=["POST"]),
@@ -307,6 +396,8 @@ class ControlApi:
             Route("/instances/{instance_id}/tasks", g(self.tasks), methods=["GET"]),
             Route("/events", self.events, methods=["GET"]),
         ] + ([
+            Route("/instances", g(self.create_profile), methods=["POST"]),
+            Route("/config/schema", g(self.config_schema), methods=["GET"]),
             Route("/instances/{instance_id}/config/schema", g(self.config_schema), methods=["GET"]),
             Route("/instances/{instance_id}/config", g(self.config_read), methods=["GET"]),
             Route("/instances/{instance_id}/config", g(self.config_update), methods=["PATCH"]),
@@ -327,6 +418,25 @@ def mount_control_api(app, api: ControlApi, dashboard_dir: Optional[str] = None)
     routes = [api.mount()]
     if dashboard_dir and os.path.isdir(dashboard_dir):
         routes.append(Route(DASHBOARD_PREFIX, lambda request: RedirectResponse(DASHBOARD_PREFIX + "/")))
-        routes.append(Mount(DASHBOARD_PREFIX, app=StaticFiles(directory=dashboard_dir, html=True)))
+        routes.append(Mount(DASHBOARD_PREFIX, app=DashboardFiles(directory=dashboard_dir, html=True)))
     for route in reversed(routes):
         app.router.routes.insert(0, route)
+
+
+class EventStream(StreamingResponse):
+    async def stream_response(self, send):
+        async def send_chunk(message):
+            await asyncio.wait_for(send(message), timeout=EVENTS_SEND_TIMEOUT_SECONDS)
+
+        await super().stream_response(send_chunk)
+
+
+class DashboardFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        accepts_html = "text/html" in Request(scope).headers.get("accept", "")
+        if response.status_code == 404 and accepts_html and path.split(os.sep)[0] != "assets":
+            response = await super().get_response("index.html", scope)
+        if response.headers.get("content-type", "").startswith("text/html"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response

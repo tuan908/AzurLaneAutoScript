@@ -1,0 +1,1420 @@
+{
+  "components": {
+    "schemas": {
+      "ConfigApplied": {
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "object"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "applied"
+        ],
+        "title": "ConfigApplied",
+        "type": "object"
+      },
+      "ConfigDoc": {
+        "properties": {
+          "config": {
+            "title": "Config",
+            "type": "object"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "config"
+        ],
+        "title": "ConfigDoc",
+        "type": "object"
+      },
+      "ConfigField": {
+        "properties": {
+          "default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "nullable": true,
+            "title": "Default"
+          },
+          "help": {
+            "title": "Help",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigOption"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "readOnly": {
+            "title": "Readonly",
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "input",
+              "select",
+              "checkbox",
+              "datetime",
+              "textarea",
+              "storage",
+              "lock",
+              "state"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "validate": {
+            "title": "Validate",
+            "type": "string"
+          },
+          "valuetype": {
+            "title": "Valuetype",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "type",
+          "label",
+          "help",
+          "default",
+          "readOnly"
+        ],
+        "title": "ConfigField",
+        "type": "object"
+      },
+      "ConfigGroup": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigField"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "help": {
+            "title": "Help",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "help",
+          "fields"
+        ],
+        "title": "ConfigGroup",
+        "type": "object"
+      },
+      "ConfigMenu": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigTask"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "tasks"
+        ],
+        "title": "ConfigMenu",
+        "type": "object"
+      },
+      "ConfigOption": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "nullable": true,
+            "title": "Value"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "ConfigOption",
+        "type": "object"
+      },
+      "ConfigSchema": {
+        "properties": {
+          "lang": {
+            "title": "Lang",
+            "type": "string"
+          },
+          "menus": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigMenu"
+            },
+            "title": "Menus",
+            "type": "array"
+          }
+        },
+        "required": [
+          "lang",
+          "menus"
+        ],
+        "title": "ConfigSchema",
+        "type": "object"
+      },
+      "ConfigTask": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigGroup"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "help": {
+            "title": "Help",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "help",
+          "groups"
+        ],
+        "title": "ConfigTask",
+        "type": "object"
+      },
+      "ConfigUpdate": {
+        "properties": {
+          "changes": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "title": "Changes",
+            "type": "object"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "changes"
+        ],
+        "title": "ConfigUpdate",
+        "type": "object"
+      },
+      "Health": {
+        "properties": {
+          "apiVersion": {
+            "title": "Apiversion",
+            "type": "integer"
+          },
+          "health": {
+            "$ref": "#/components/schemas/HealthChecks"
+          },
+          "instances": {
+            "$ref": "#/components/schemas/InstanceCounts"
+          },
+          "logQueueManagerAlive": {
+            "nullable": true,
+            "title": "Logqueuemanageralive",
+            "type": "boolean"
+          },
+          "serverPid": {
+            "title": "Serverpid",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "time": {
+            "title": "Time",
+            "type": "string"
+          },
+          "uptimeSeconds": {
+            "title": "Uptimeseconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "status",
+          "apiVersion",
+          "time",
+          "serverPid",
+          "uptimeSeconds",
+          "instances"
+        ],
+        "title": "Health",
+        "type": "object"
+      },
+      "HealthCheck": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "warn",
+              "fail"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status",
+          "detail"
+        ],
+        "title": "HealthCheck",
+        "type": "object"
+      },
+      "HealthChecks": {
+        "properties": {
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/HealthCheck"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "warn",
+              "fail"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "checks"
+        ],
+        "title": "HealthChecks",
+        "type": "object"
+      },
+      "HealthDetails": {
+        "properties": {
+          "apiVersion": {
+            "title": "Apiversion",
+            "type": "integer"
+          },
+          "health": {
+            "$ref": "#/components/schemas/HealthChecks"
+          },
+          "instanceDetails": {
+            "items": {
+              "$ref": "#/components/schemas/InstanceStatus"
+            },
+            "title": "Instancedetails",
+            "type": "array"
+          },
+          "instances": {
+            "$ref": "#/components/schemas/InstanceCounts"
+          },
+          "logQueueManagerAlive": {
+            "nullable": true,
+            "title": "Logqueuemanageralive",
+            "type": "boolean"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/Metrics"
+          },
+          "serverPid": {
+            "title": "Serverpid",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "time": {
+            "title": "Time",
+            "type": "string"
+          },
+          "uptimeSeconds": {
+            "title": "Uptimeseconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "status",
+          "apiVersion",
+          "time",
+          "serverPid",
+          "uptimeSeconds",
+          "instances",
+          "metrics",
+          "instanceDetails"
+        ],
+        "title": "HealthDetails",
+        "type": "object"
+      },
+      "InstanceCounts": {
+        "properties": {
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "running": {
+            "title": "Running",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "running",
+          "failed"
+        ],
+        "title": "InstanceCounts",
+        "type": "object"
+      },
+      "InstanceHealth": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/InstanceRecovery"
+          },
+          "state": {
+            "enum": [
+              "ok",
+              "idle",
+              "stopped",
+              "stalled",
+              "crashed",
+              "human_takeover",
+              "unmanaged"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "detail",
+          "recovery"
+        ],
+        "title": "InstanceHealth",
+        "type": "object"
+      },
+      "InstancePolicy": {
+        "properties": {
+          "autoRestart": {
+            "title": "Autorestart",
+            "type": "boolean"
+          },
+          "restartOnStall": {
+            "title": "Restartonstall",
+            "type": "boolean"
+          },
+          "stallMinutes": {
+            "title": "Stallminutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "autoRestart",
+          "restartOnStall",
+          "stallMinutes"
+        ],
+        "title": "InstancePolicy",
+        "type": "object"
+      },
+      "InstanceRecovery": {
+        "properties": {
+          "gaveUp": {
+            "title": "Gaveup",
+            "type": "boolean"
+          },
+          "nextAttemptAt": {
+            "nullable": true,
+            "title": "Nextattemptat",
+            "type": "string"
+          },
+          "pendingReason": {
+            "nullable": true,
+            "title": "Pendingreason",
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/InstancePolicy"
+          },
+          "restartsLastHour": {
+            "title": "Restartslasthour",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "policy",
+          "restartsLastHour",
+          "nextAttemptAt",
+          "pendingReason",
+          "gaveUp"
+        ],
+        "title": "InstanceRecovery",
+        "type": "object"
+      },
+      "InstanceStatus": {
+        "properties": {
+          "currentTask": {
+            "nullable": true,
+            "title": "Currenttask",
+            "type": "string"
+          },
+          "exitCode": {
+            "nullable": true,
+            "title": "Exitcode",
+            "type": "integer"
+          },
+          "health": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InstanceHealth"
+              }
+            ],
+            "nullable": true,
+            "title": "Health"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "lastActivityAt": {
+            "nullable": true,
+            "title": "Lastactivityat",
+            "type": "string"
+          },
+          "lastError": {
+            "nullable": true,
+            "title": "Lasterror",
+            "type": "string"
+          },
+          "legacyState": {
+            "title": "Legacystate",
+            "type": "integer"
+          },
+          "logDraining": {
+            "title": "Logdraining",
+            "type": "boolean"
+          },
+          "processId": {
+            "nullable": true,
+            "title": "Processid",
+            "type": "integer"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "runLogStartSeq": {
+            "title": "Runlogstartseq",
+            "type": "integer"
+          },
+          "startedAt": {
+            "nullable": true,
+            "title": "Startedat",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "stopped",
+              "starting",
+              "running",
+              "stopping",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "stoppedAt": {
+            "nullable": true,
+            "title": "Stoppedat",
+            "type": "string"
+          },
+          "taskFailures": {
+            "title": "Taskfailures",
+            "type": "integer"
+          },
+          "taskSuccesses": {
+            "title": "Tasksuccesses",
+            "type": "integer"
+          },
+          "unmanaged": {
+            "title": "Unmanaged",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "processId",
+          "startedAt",
+          "stoppedAt",
+          "exitCode",
+          "currentTask",
+          "lastActivityAt",
+          "lastError",
+          "legacyState",
+          "revision",
+          "runLogStartSeq",
+          "logDraining",
+          "unmanaged",
+          "taskSuccesses",
+          "taskFailures"
+        ],
+        "title": "InstanceStatus",
+        "type": "object"
+      },
+      "Instances": {
+        "properties": {
+          "instances": {
+            "items": {
+              "$ref": "#/components/schemas/InstanceStatus"
+            },
+            "title": "Instances",
+            "type": "array"
+          }
+        },
+        "required": [
+          "instances"
+        ],
+        "title": "Instances",
+        "type": "object"
+      },
+      "LogChunk": {
+        "properties": {
+          "lastSeq": {
+            "title": "Lastseq",
+            "type": "integer"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/LogLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          }
+        },
+        "required": [
+          "lines",
+          "lastSeq"
+        ],
+        "title": "LogChunk",
+        "type": "object"
+      },
+      "LogLine": {
+        "properties": {
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "text"
+        ],
+        "title": "LogLine",
+        "type": "object"
+      },
+      "Metrics": {
+        "properties": {
+          "sseConnections": {
+            "title": "Sseconnections",
+            "type": "integer"
+          },
+          "taskFailures": {
+            "title": "Taskfailures",
+            "type": "integer"
+          },
+          "taskSuccesses": {
+            "title": "Tasksuccesses",
+            "type": "integer"
+          },
+          "workerRestarts": {
+            "title": "Workerrestarts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "taskSuccesses",
+          "taskFailures",
+          "workerRestarts",
+          "sseConnections"
+        ],
+        "title": "Metrics",
+        "type": "object"
+      },
+      "PolicyApplied": {
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/RecoveryPolicy"
+          }
+        },
+        "required": [
+          "policy"
+        ],
+        "title": "PolicyApplied",
+        "type": "object"
+      },
+      "PolicyOverride": {
+        "properties": {
+          "autoRestart": {
+            "title": "Autorestart",
+            "type": "boolean"
+          },
+          "restartOnStall": {
+            "title": "Restartonstall",
+            "type": "boolean"
+          },
+          "stallMinutes": {
+            "title": "Stallminutes",
+            "type": "integer"
+          }
+        },
+        "title": "PolicyOverride",
+        "type": "object"
+      },
+      "PolicyUpdate": {
+        "properties": {
+          "backoffSeconds": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Backoffseconds",
+            "type": "array"
+          },
+          "instances": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PolicyOverride"
+            },
+            "title": "Instances",
+            "type": "object"
+          },
+          "maxRestartsPerHour": {
+            "title": "Maxrestartsperhour",
+            "type": "integer"
+          }
+        },
+        "title": "PolicyUpdate",
+        "type": "object"
+      },
+      "ProfileCreate": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "source": {
+            "nullable": true,
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "ProfileCreate",
+        "type": "object"
+      },
+      "RecoveryEvent": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instanceId": {
+            "title": "Instanceid",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "time": {
+            "title": "Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "time",
+          "instanceId",
+          "action",
+          "reason",
+          "detail"
+        ],
+        "title": "RecoveryEvent",
+        "type": "object"
+      },
+      "RecoveryPolicy": {
+        "properties": {
+          "backoffSeconds": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Backoffseconds",
+            "type": "array"
+          },
+          "instances": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PolicyOverride"
+            },
+            "title": "Instances",
+            "type": "object"
+          },
+          "maxRestartsPerHour": {
+            "title": "Maxrestartsperhour",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "maxRestartsPerHour",
+          "backoffSeconds",
+          "instances"
+        ],
+        "title": "RecoveryPolicy",
+        "type": "object"
+      },
+      "RecoverySnapshot": {
+        "properties": {
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/RecoveryEvent"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/RecoveryPolicy"
+          }
+        },
+        "required": [
+          "policy",
+          "history"
+        ],
+        "title": "RecoverySnapshot",
+        "type": "object"
+      },
+      "Task": {
+        "properties": {
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "nextRun": {
+            "nullable": true,
+            "title": "Nextrun",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command",
+          "nextRun"
+        ],
+        "title": "Task",
+        "type": "object"
+      },
+      "Tasks": {
+        "properties": {
+          "pending": {
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            },
+            "title": "Pending",
+            "type": "array"
+          },
+          "running": {
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            },
+            "title": "Running",
+            "type": "array"
+          },
+          "waiting": {
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            },
+            "title": "Waiting",
+            "type": "array"
+          }
+        },
+        "required": [
+          "running",
+          "pending",
+          "waiting"
+        ],
+        "title": "Tasks",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "ALAS Control API",
+    "version": "1"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/api/v1/config/schema": {
+      "get": {
+        "operationId": "config_schema_global",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lang",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigSchema"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/events": {
+      "get": {
+        "operationId": "events",
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/health/details": {
+      "get": {
+        "operationId": "health_snapshot",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthDetails"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/instances": {
+      "get": {
+        "operationId": "list_instances",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Instances"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "operationId": "create_profile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceStatus"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/instances/{instance_id}": {
+      "get": {
+        "operationId": "get_instance",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceStatus"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/instances/{instance_id}/config": {
+      "get": {
+        "operationId": "config_read",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigDoc"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "config_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigApplied"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/instances/{instance_id}/config/schema": {
+      "get": {
+        "operationId": "config_schema",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lang",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigSchema"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/instances/{instance_id}/logs": {
+      "get": {
+        "operationId": "logs",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogChunk"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/instances/{instance_id}/restart": {
+      "post": {
+        "operationId": "restart",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceStatus"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/instances/{instance_id}/start": {
+      "post": {
+        "operationId": "start",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceStatus"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/instances/{instance_id}/stop": {
+      "post": {
+        "operationId": "stop",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceStatus"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/instances/{instance_id}/tasks": {
+      "get": {
+        "operationId": "tasks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tasks"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/recovery": {
+      "get": {
+        "operationId": "recovery",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoverySnapshot"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/recovery/policy": {
+      "patch": {
+        "operationId": "recovery_policy",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyApplied"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "bearer": []
+    },
+    {}
+  ]
+}

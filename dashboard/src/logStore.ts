@@ -45,6 +45,11 @@ export class LogStore {
     this.emit();
   }
 
+  clear() {
+    this.lines.clear();
+    this.emit();
+  }
+
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

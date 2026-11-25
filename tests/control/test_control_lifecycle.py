@@ -15,12 +15,13 @@ class _QueueOnlyManager:
     """Stands in for the SyncManager: workers only need Queue()"""
 
     @staticmethod
-    def Queue():
-        return multiprocessing.Queue()
+    def Queue(maxsize=0):
+        return multiprocessing.Queue(maxsize)
 
 
 @pytest.fixture
 def pm(monkeypatch, tmp_path):
+    monkeypatch.setattr("module.webui.process_manager.WORKER_LOCK_DIR", str(tmp_path / "workers"))
     monkeypatch.setattr(State, "manager", _QueueOnlyManager())
     monkeypatch.setattr(ProcessManager, "_processes", {})
     monkeypatch.setattr(ProcessManager, "stop_join_timeout", 5.0)
@@ -191,3 +192,19 @@ def test_current_task_and_activity_come_from_logs(pm):
     assert manager.start(pm.spawns)
     assert wait_until(lambda: manager.status()["currentTask"] == "Commission")
     assert manager.status()["lastActivityAt"] is not None
+
+
+def test_worker_keeps_ownership_if_registry_is_lost(pm, monkeypatch):
+    old = pm()
+    assert old.start(pm.spawns)
+    assert wait_until(lambda: fakes.spawn_count(pm.spawns) == 1)
+
+    monkeypatch.setattr(ProcessManager, "_processes", {})
+    new = pm()
+    assert new.status()["unmanaged"]
+    assert not new.start(pm.spawns)
+    assert not new.stop()
+
+    assert old.stop()
+    assert new.start(pm.spawns)
+    assert wait_until(lambda: fakes.spawn_count(pm.spawns) == 2)

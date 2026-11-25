@@ -1,3 +1,4 @@
 node_modules/
-# Built app is committed so the backend can serve it without Bun
-!dist/
+dist/
+test-results/
+!bun.lock

@@ -117,7 +117,7 @@ HELPER_FLAG = '--open-files-helper'
 # ALAS file_formatter: '%(asctime)s.%(msecs)03d | %(levelname)s | %(message)s'
 LOG_LINE_RE = re.compile(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\.(\d{3}) \|')
 # module/logger.py: f'./log/{datetime.date.today()}_{name}.txt'
-LOG_NAME_RE = re.compile(r'^\d{4}-\d{2}-\d{2}_(.+)\.txt$')
+LOG_NAME_RE = re.compile(r'^\d{4}-\d{2}-\d{2}_(.+?)(?:\.rotated-\d+)?\.txt$')
 # deploy/utils.py poor_yaml_read, restricted to the keys needed here
 DEPLOY_LINE_RE = re.compile(r'^\s*(\w+)\s*:(.*)$')
 
@@ -207,7 +207,7 @@ def is_gui_command(snap):
         return False
     if is_probe_command(snap):
         return False
-    return any(basename(arg) == 'gui.py' for arg in snap.cmdline[1:])
+    return any(basename(arg) in ('gui.py', 'control_server.py') for arg in snap.cmdline[1:])
 
 
 def is_zombie(snap):

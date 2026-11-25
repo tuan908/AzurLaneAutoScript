@@ -39,6 +39,7 @@ from pywebio.output import (
 )
 from pywebio.pin import pin, pin_on_change
 from pywebio.session import download, go_app, info, local, register_thread, run_js, set_env
+from starlette.applications import Starlette
 
 import module.webui.lang as lang
 from module.config.config import AzurLaneConfig, Function
@@ -49,7 +50,6 @@ from module.config.server import to_server
 from module.config.utils import (
     alas_instance,
     alas_template,
-    dict_to_kv,
     filepath_args,
     filepath_config,
     read_file,
@@ -537,7 +537,7 @@ class AlasGUI(Frame):
     ) -> None:
         try:
             # Same lock as the Alas worker and the control API, so no save is lost
-            with config_lock(config_name):
+            with config_lock(config_name, required=True):
                 valid = []
                 invalid = []
                 config = config_updater.read_file(config_name)
@@ -569,7 +569,7 @@ class AlasGUI(Frame):
                     else:
                         modified.pop(k)
                         invalid.append(k)
-                        logger.warning(f"Invalid value {v} for key {k}, skip saving.")
+                        logger.warning(f"Invalid value for key {k}, skip saving.")
                 self.pin_remove_invalid_mark(valid)
                 self.pin_set_invalid_mark(invalid)
                 if modified:
@@ -579,10 +579,11 @@ class AlasGUI(Frame):
                         position="right",
                         color="success",
                     )
-                    logger.info(
-                        f"Save config {filepath_config(config_name)}, {dict_to_kv(modified)}"
-                    )
-                    config_updater.write_file(config_name, config)
+                    logger.info(f"Save config {filepath_config(config_name)} ({len(modified)} values)")
+                    output = read_file(filepath_config(config_name, self.alas_mod))
+                    for path, value in deep_iter(config, depth=3):
+                        deep_set(output, path, value)
+                    config_updater.write_file(config_name, output)
         except Exception as e:
             logger.exception(e)
 
@@ -964,7 +965,6 @@ class AlasGUI(Frame):
         def _force_restart():
             if State.restart_event is not None:
                 toast("Alas will restart in 3 seconds", duration=0, color="error")
-                clearup()
                 State.restart_event.set()
             else:
                 toast("Reload not enabled", color="error")
@@ -1448,18 +1448,20 @@ def debug():
     AlasGUI().run()
 
 
-def startup():
+def startup(headless=False):
     State.init()
     lang.reload()
     updater.event = State.manager.Event()
+    if State.deploy_config.StartOcrServer:
+        start_ocr_server_process(State.deploy_config.OcrServerPort)
+    if headless:
+        return
     if updater.delay > 0:
         task_handler.add(updater.check_update, updater.delay)
     task_handler.add(updater.schedule_update(), 86400)
     task_handler.start()
     if State.deploy_config.DiscordRichPresence:
         init_discord_rpc()
-    if State.deploy_config.StartOcrServer:
-        start_ocr_server_process(State.deploy_config.OcrServerPort)
     if (
             State.deploy_config.EnableRemoteAccess
             and State.deploy_config.Password is not None
@@ -1467,23 +1469,24 @@ def startup():
         task_handler.add(RemoteAccess.keep_ssh_alive(), 60)
 
 
-def clearup():
+def clearup(headless=False):
     """
     Notice: Ensure run it before uvicorn reload app,
     all process will NOT EXIT after close electron app.
     """
     logger.info("Start clearup")
-    RemoteAccess.kill_ssh_process()
-    close_discord_rpc()
+    if not headless:
+        task_handler.stop()
+        RemoteAccess.kill_ssh_process()
+        close_discord_rpc()
+    for manager in ProcessManager.all_managers():
+        manager.stop()
     stop_ocr_server_process()
-    for alas in ProcessManager._processes.values():
-        alas.stop()
     State.clearup()
-    task_handler.stop()
     logger.info("Alas closed.")
 
 
-def app():
+def app(headless=False):
     parser = argparse.ArgumentParser(description="Alas web service")
     parser.add_argument(
         "-k", "--key", type=str, help="Password of alas. No password by default"
@@ -1543,19 +1546,16 @@ def app():
             return
         app_manage()
 
-    app = asgi_app(
-        applications=[index, manage],
-        cdn=cdn,
-        static_dir=None,
-        debug=True,
-        on_startup=[
-            startup,
-            lambda: ProcessManager.restart_processes(
-                instances=instances, ev=updater.event
-            ),
-        ],
-        on_shutdown=[clearup],
+    lifecycle = dict(
+        on_startup=[partial(startup, headless), lambda: ProcessManager.restart_processes(
+            instances=instances, ev=updater.event
+        )],
+        on_shutdown=[partial(clearup, headless)],
     )
+    if headless:
+        app = Starlette(**lifecycle)
+    else:
+        app = asgi_app(applications=[index, manage], cdn=cdn, static_dir=None, debug=True, **lifecycle)
 
     # Control plane API at /api/v1, sharing ProcessManager with the GUI above
     from module.control.api import ControlApi, mount_control_api
@@ -1591,6 +1591,7 @@ def app():
             lock=lambda name: config_lock(name, timeout=10, required=True),
         ),
         monitor=monitor,
+        shutting_down=lambda: State.shutting_down,
     ), dashboard_dir=os.path.abspath("./dashboard/dist"))
 
     return app
@@ -1602,9 +1603,12 @@ def _instance_i18n(config_name: str, lang: str) -> dict:
     return read_file(path) if os.path.exists(path) else {}
 
 
-def _read_config_bytes(config_name: str) -> bytes:
-    with open(filepath_config(config_name), "rb") as f:
-        return f.read()
+def _read_config_bytes(config_name: str) -> Optional[bytes]:
+    try:
+        with open(filepath_config(config_name), "rb") as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
 
 
 def _instance_tasks(config_name: str) -> dict:

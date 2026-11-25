@@ -51,6 +51,12 @@ class FakeService:
         self.set(iid, "running", started=self.clock())
         return self.statuses[iid]
 
+    def recover(self, expected, reason):
+        iid = expected["id"]
+        if self.statuses[iid] != expected:
+            return None
+        return self.restart(iid) if reason == "stalled" else self.start(iid)
+
 
 @pytest.fixture
 def env(tmp_path):
@@ -105,6 +111,18 @@ def test_no_recovery_unless_enabled(env):
         clock.now += 600
     assert service.calls == []
     assert health(monitor)["recovery"]["nextAttemptAt"] is None
+
+
+def test_takeover_exit_code_blocks_recovery_without_log(env):
+    from module.exception import HUMAN_TAKEOVER_EXIT_CODE
+
+    _, service, policy, monitor = env
+    policy.update({"instances": {"alas": {"autoRestart": True}}, "backoffSeconds": [0]})
+    service.set("alas", "failed")
+    service.statuses["alas"]["exitCode"] = HUMAN_TAKEOVER_EXIT_CODE
+    monitor.tick()
+    assert health(monitor)["state"] == "human_takeover"
+    assert service.calls == []
 
 
 def test_crash_restart_with_backoff(env):
@@ -233,8 +251,8 @@ def test_background_thread_runs_and_stops(env):
 
 class _QueueOnlyManager:
     @staticmethod
-    def Queue():
-        return multiprocessing.Queue()
+    def Queue(maxsize=0):
+        return multiprocessing.Queue(maxsize)
 
 
 def test_restarts_a_real_crashed_worker(tmp_path, monkeypatch):
@@ -243,6 +261,7 @@ def test_restarts_a_real_crashed_worker(tmp_path, monkeypatch):
     from module.webui.process_manager import ProcessManager
     from module.webui.setting import State
 
+    monkeypatch.setattr("module.webui.process_manager.WORKER_LOCK_DIR", str(tmp_path / "workers"))
     monkeypatch.setattr(State, "manager", _QueueOnlyManager())
     monkeypatch.setattr(ProcessManager, "_processes", {})
     monkeypatch.setattr(ProcessManager, "run_process", staticmethod(fakes.worker_crashes))
@@ -258,7 +277,7 @@ def test_restarts_a_real_crashed_worker(tmp_path, monkeypatch):
     manager.start(spawns)
     for _ in range(3):
         deadline = time.time() + 10
-        while manager.alive and time.time() < deadline:
+        while (manager.alive or manager.status()["logDraining"]) and time.time() < deadline:
             time.sleep(0.05)
         monitor.tick()
     assert fakes.spawn_count(spawns) == 3  # first start + 2 restarts
@@ -278,6 +297,7 @@ def test_deliberate_stop_is_not_recovered(tmp_path, monkeypatch):
     from module.webui.process_manager import ProcessManager
     from module.webui.setting import State
 
+    monkeypatch.setattr("module.webui.process_manager.WORKER_LOCK_DIR", str(tmp_path / "workers"))
     monkeypatch.setattr(State, "manager", _QueueOnlyManager())
     monkeypatch.setattr(ProcessManager, "_processes", {})
     monkeypatch.setattr(ProcessManager, "run_process", staticmethod(fakes.worker_runs))

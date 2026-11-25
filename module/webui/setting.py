@@ -54,6 +54,7 @@ class State:
 
     _init = False
     _clearup = False
+    shutting_down = False
 
     restart_event: threading.Event = None
     manager: SyncManager = None
@@ -62,6 +63,7 @@ class State:
 
     @classmethod
     def init(cls):
+        cls.shutting_down = False
         cls.manager = multiprocessing.Manager()
         cls._init = True
 

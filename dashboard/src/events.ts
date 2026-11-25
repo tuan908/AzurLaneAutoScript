@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
-import { api, eventsUrl, type InstanceStatus, type LogLine } from "./api";
+import { api, openEvents, type InstanceStatus, type LogLine } from "./api";
 import { logStore } from "./logStore";
 
 export type Connection = "connecting" | "open" | "closed";
@@ -38,13 +38,14 @@ function upsertInstance(qc: QueryClient, status: InstanceStatus) {
 }
 
 /**
- * One EventSource for the whole app. The REST snapshot is authoritative: on every
+ * One SSE stream for the whole app. The REST snapshot is authoritative: on every
  * (re)connect the instance list and log backlogs are refetched, then SSE applies deltas.
  */
 export function connectEvents(qc: QueryClient): () => void {
-  let source: EventSource | null = null;
+  const controller = new AbortController();
   let retry: number | undefined;
-  let closed = false;
+  let lastStreamId: string | undefined;
+  let retryDelay = 1000;
 
   const resync = async () => {
     await qc.invalidateQueries();
@@ -53,44 +54,65 @@ export function connectEvents(qc: QueryClient): () => void {
       instances.map((s) =>
         api
           .logs(s.id)
-          .then((chunk) => logStore.reset(s.id, chunk.lines))
+          .then((chunk) => {
+            if (!controller.signal.aborted) logStore.reset(s.id, chunk.lines);
+          })
           .catch(() => undefined),
       ),
     );
   };
 
-  const open = () => {
-    if (closed) return;
+  const open = async () => {
+    if (controller.signal.aborted) return;
     setConnection("connecting");
-    source = new EventSource(eventsUrl());
-    source.onopen = () => {
-      setConnection("open");
-      void resync();
-    };
-    source.onerror = () => {
+    try {
+      const response = await openEvents(controller.signal);
+      if (!response.ok || !response.body) throw new Error(`Stream returned ${response.status}`);
+      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+      let buffer = "";
+      try {
+        while (!controller.signal.aborted) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += value;
+          let boundary: number;
+          while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+            const frame = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            const fields = frame.split("\n");
+            const event = fields.find((line) => line.startsWith("event: "))?.slice(7);
+            const data = fields.find((line) => line.startsWith("data: "))?.slice(6);
+            if (!data) continue;
+            const payload = JSON.parse(data);
+            if (event === "resync") {
+              if (lastStreamId !== payload.streamId) logStore.clear();
+              lastStreamId = payload.streamId;
+              await resync();
+              retryDelay = 1000;
+              if (!controller.signal.aborted) setConnection("open");
+            } else if (event === "instance.status.changed") {
+              upsertInstance(qc, payload.data);
+            } else if (event === "log.appended") {
+              logStore.append(payload.instanceId, payload.lines as LogLine[]);
+            }
+          }
+        }
+      } finally {
+        await reader.cancel().catch(() => undefined);
+      }
+    } catch {
+      // REST polling keeps the dashboard usable during a stream outage.
+    }
+    if (!controller.signal.aborted) {
       setConnection("closed");
-      source?.close();
-      source = null;
-      // EventSource retries by itself only for some failures; always reconnect ourselves
-      retry = window.setTimeout(open, 3000);
-    };
-    source.addEventListener("instance.status.changed", (e) => {
-      const { data } = JSON.parse((e as MessageEvent).data) as { data: InstanceStatus };
-      upsertInstance(qc, data);
-    });
-    source.addEventListener("log.appended", (e) => {
-      const { instanceId, lines } = JSON.parse((e as MessageEvent).data) as {
-        instanceId: string;
-        lines: LogLine[];
-      };
-      logStore.append(instanceId, lines);
-    });
+      retry = window.setTimeout(open, retryDelay);
+      retryDelay = Math.min(retryDelay * 2, 15000);
+    }
   };
 
   open();
   return () => {
-    closed = true;
+    controller.abort();
     window.clearTimeout(retry);
-    source?.close();
   };
 }

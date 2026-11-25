@@ -23,6 +23,7 @@ import time
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional
 
+from module.exception import HUMAN_TAKEOVER_EXIT_CODE
 from module.logger import logger
 
 POLICY_FILE = "./config/control.yaml"
@@ -175,11 +176,12 @@ class HealthMonitor:
         self.history = collections.deque(maxlen=HISTORY_LENGTH)
         self._recovery: Dict[str, _Recovery] = {}
         self._health: Dict[str, dict] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self.last_tick_at: Optional[float] = None
         self.last_error: Optional[str] = None
+        self.restart_count = 0
 
     # ------------------------------------------------------------ lifecycle
 
@@ -211,14 +213,21 @@ class HealthMonitor:
     def _record(self, instance_id: str, action: str, reason: str, detail: str = "") -> None:
         entry = {"time": _iso(self.clock()), "instanceId": instance_id, "action": action, "reason": reason,
                  "detail": detail}
-        self.history.append(entry)
+        with self._lock:
+            self.history.append(entry)
         logger.info(f"[{instance_id}] recovery {action}: {reason} {detail}".rstrip())
 
     def _classify(self, status: dict, policy: dict, now: float) -> dict:
         state = status["state"]
+        if status.get("unmanaged"):
+            return {"state": "unmanaged", "detail": status["lastError"]}
         if state in ("starting", "stopping"):
             return {"state": "ok", "detail": state}
         if state == "failed":
+            if status.get("exitCode") == HUMAN_TAKEOVER_EXIT_CODE:
+                return {"state": "human_takeover", "detail": "Alas requested human takeover, see the log"}
+            if status.get("logDraining"):
+                return {"state": "ok", "detail": "Reading the worker's final log messages"}
             # Only this run's last lines: an earlier run may have asked for a human
             tail = self.service.logs(status["id"], status.get("runLogStartSeq") or 0, 30)["lines"]
             if any(marker in line["text"] for line in tail for marker in HUMAN_TAKEOVER_MARKERS):
@@ -268,8 +277,8 @@ class HealthMonitor:
                     rec.next_attempt_at = None
                     rec.pending_reason = None
 
-            if wants is not None and rec.gave_up_at is None:
-                restarted = self._maybe_restart(iid, wants, health, rec, now, max_restarts, backoff)
+            if wants is not None and rec.gave_up_at is None and self.log_queue_alive() is not False:
+                restarted = self._maybe_restart(status, wants, health, rec, now, max_restarts, backoff)
                 if restarted is not None:
                     health = self._classify(restarted, instance_policy, now)
 
@@ -277,8 +286,9 @@ class HealthMonitor:
                 self._health[iid] = dict(health, recovery=self._recovery_view(rec, instance_policy))
         self.last_tick_at = now
 
-    def _maybe_restart(self, iid, reason, health, rec, now, max_restarts, backoff) -> Optional[dict]:
+    def _maybe_restart(self, status, reason, health, rec, now, max_restarts, backoff) -> Optional[dict]:
         """Returns: the new status if a restart was attempted"""
+        iid = status["id"]
         with self._lock:
             if len(rec.restarts) >= max_restarts:
                 rec.gave_up_at = now
@@ -295,19 +305,20 @@ class HealthMonitor:
         if give_up:
             self._record(iid, "gave_up", reason, f"{max_restarts} restarts within an hour, start it manually")
             return None
-        if not due:
+        if not due or self._stop.is_set():
             return None
         try:
-            if reason == "stalled":
-                result = self.service.restart(iid)
-            else:
-                result = self.service.start(iid)
-            ok = result.get("state") in ("starting", "running")
+            result = self.service.recover(status, reason)
+            if result is None:
+                return None
+            ok = result.get("state") in ("starting", "running") and not result.get("unmanaged")
         except Exception as e:
             ok = False
             result = None
             error = str(e)
         with self._lock:
+            if ok:
+                self.restart_count += 1
             rec.restarts.append(now)
             rec.consecutive += 1
             rec.last_restart_at = now
@@ -357,7 +368,7 @@ class HealthMonitor:
             for iid, health in sorted(self._health.items()):
                 state = health["state"]
                 status = ("fail" if state in ("crashed", "human_takeover") or health["recovery"]["gaveUp"]
-                          else "warn" if state == "stalled" else "ok")
+                          else "warn" if state in ("stalled", "unmanaged") else "ok")
                 checks.append({"name": f"instance:{iid}", "status": status,
                                "detail": f"{state}{': ' + health['detail'] if health['detail'] else ''}"})
         overall = ("fail" if any(c["status"] == "fail" for c in checks)
@@ -365,4 +376,6 @@ class HealthMonitor:
         return {"status": overall, "checks": checks}
 
     def snapshot(self) -> dict:
-        return {"policy": self.policy.get(), "history": list(self.history)[::-1]}
+        policy = self.policy.get()
+        with self._lock:
+            return {"policy": policy, "history": list(self.history)[::-1]}

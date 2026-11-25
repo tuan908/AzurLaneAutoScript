@@ -34,7 +34,7 @@ class AzurLaneAutoScript:
             return config
         except RequestHumanTakeover:
             logger.critical('Request human takeover')
-            exit(1)
+            exit(HUMAN_TAKEOVER_EXIT_CODE)
         except Exception as e:
             logger.exception(e)
             exit(1)
@@ -47,7 +47,7 @@ class AzurLaneAutoScript:
             return device
         except RequestHumanTakeover:
             logger.critical('Request human takeover')
-            exit(1)
+            exit(HUMAN_TAKEOVER_EXIT_CODE)
         except Exception as e:
             logger.exception(e)
             exit(1)
@@ -121,7 +121,7 @@ class AzurLaneAutoScript:
                 title=f"Alas <{self.config_name}> crashed",
                 content=f"<{self.config_name}> RequestHumanTakeover",
             )
-            exit(1)
+            exit(HUMAN_TAKEOVER_EXIT_CODE)
         except Exception as e:
             logger.exception(e)
             self.save_error_log()
@@ -589,7 +589,8 @@ class AzurLaneAutoScript:
             self.device.click_record_clear()
             logger.hr(task, level=0)
             success = self.run(inflection.underscore(task))
-            logger.info(f'Scheduler: End task `{task}`')
+            outcome = 'success' if success else 'failure'
+            logger.info(f'Scheduler: End task `{task}` [{outcome}]')
             self.is_first_task = False
 
             # Check failures
@@ -608,7 +609,7 @@ class AzurLaneAutoScript:
                     title=f"Alas <{self.config_name}> crashed",
                     content=f"<{self.config_name}> RequestHumanTakeover\nTask `{task}` failed 3 or more times.",
                 )
-                exit(1)
+                exit(HUMAN_TAKEOVER_EXIT_CODE)
 
             if success:
                 del_cached_property(self, 'config')

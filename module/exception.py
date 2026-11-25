@@ -61,6 +61,9 @@ class GamePageUnknownError(Exception):
     pass
 
 
+HUMAN_TAKEOVER_EXIT_CODE = 10
+
+
 class RequestHumanTakeover(Exception):
     # Request human takeover
     # Alas is unable to handle such error, probably because of wrong settings.

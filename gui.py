@@ -12,6 +12,8 @@ def func(ev: threading.Event):
 
     import uvicorn
 
+    from control_server import ControlServer
+
     if sys.platform.startswith("win"):
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
@@ -79,10 +81,17 @@ def func(ev: threading.Event):
     elif ssl_key is None and ssl_cert is not None:
         logger.error("SSL certificate provided without key. Please provide both SSL key and certificate.")
 
-    if ssl:
-        uvicorn.run("module.webui.app:app", host=host, port=port, factory=True, ssl_keyfile=ssl_key, ssl_certfile=ssl_cert)
-    else:
-        uvicorn.run("module.webui.app:app", host=host, port=port, factory=True)
+    server = ControlServer(uvicorn.Config(
+        "module.webui.app:app", host=host, port=port, factory=True, workers=1, access_log=False,
+        ssl_keyfile=ssl_key if ssl else None, ssl_certfile=ssl_cert if ssl else None,
+    ))
+    if ev is not None:
+        def reload_on_event():
+            ev.wait()
+            server.should_exit = True
+
+        threading.Thread(target=reload_on_event, daemon=True).start()
+    server.run()
 
 
 if __name__ == "__main__":
@@ -97,9 +106,11 @@ if __name__ == "__main__":
                     b = event.wait(1)
                 except KeyboardInterrupt:
                     should_exit = True
+                    event.set()
+                    process.join()
                     break
                 if b:
-                    process.kill()
+                    process.join()
                     break
                 elif process.is_alive():
                     continue

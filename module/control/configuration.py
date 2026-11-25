@@ -10,6 +10,7 @@ read, patched and written back as a whole.
 import contextlib
 import datetime
 import hashlib
+import json
 import re
 from typing import Any, Callable, ContextManager, Dict, Iterable, List, Optional, Tuple
 
@@ -33,6 +34,10 @@ class ConfigInvalid(Exception):
 
 
 class ConfigUnsupported(Exception):
+    pass
+
+
+class ProfileExists(Exception):
     pass
 
 
@@ -92,7 +97,7 @@ class ConfigService:
             args: Callable[[str], dict],
             menu: Callable[[str], dict],
             i18n: Callable[[str, str], dict],
-            read_raw: Callable[[str], bytes],
+            read_raw: Callable[[str], Optional[bytes]],
             read_config: Callable[[str], dict],
             write_config: Callable[[str, dict], None],
             save_callback: Callable[[str, Any], Iterable[Tuple[str, Any]]] = lambda key, value: (),
@@ -190,10 +195,29 @@ class ConfigService:
 
     # ------------------------------------------------------------ values
 
+    def create(self, instance_id: str, source: Optional[str]) -> None:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,47}", instance_id):
+            raise ValueError("Use 1–48 letters, digits, hyphens or underscores, starting with a letter or digit")
+        if instance_id.lower().startswith("template") or re.fullmatch(
+                r"CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9]", instance_id, flags=re.I):
+            raise ValueError("This profile name is reserved")
+        if source is not None:
+            self._require_alas(source)
+            with self._lock(source):
+                raw = self._read_raw(source)
+                config = json.loads(raw) if raw else self._read_config(source)
+        else:
+            config = self._read_config("template")
+        with self._lock(instance_id):
+            if self._read_raw(instance_id) is not None:
+                raise ProfileExists(instance_id)
+            self._write_config(instance_id, config)
+
     def read(self, instance_id: str) -> dict:
         self._require_alas(instance_id)
-        revision = _revision(self._read_raw(instance_id))
-        return {"revision": revision, "config": _jsonable(self._read_config(instance_id))}
+        with self._lock(instance_id):
+            revision = _revision(self._read_raw(instance_id) or b"")
+            return {"revision": revision, "config": _jsonable(self._read_config(instance_id))}
 
     def update(self, instance_id: str, revision: str, changes: Dict[str, Any]) -> dict:
         """
@@ -210,7 +234,8 @@ class ConfigService:
             return self._update_locked(instance_id, revision, changes)
 
     def _update_locked(self, instance_id: str, revision: str, changes: Dict[str, Any]) -> dict:
-        current = _revision(self._read_raw(instance_id))
+        raw = self._read_raw(instance_id)
+        current = _revision(raw or b"")
         if revision != current:
             raise ConfigConflict(current)
 
@@ -232,7 +257,7 @@ class ConfigService:
         if errors:
             raise ConfigInvalid(errors)
 
-        config = self._read_config(instance_id)
+        config = json.loads(raw) if raw else self._read_config(instance_id)
         applied = {}
         for path, value in coerced.items():
             deep_set(config, path, value)
@@ -241,10 +266,11 @@ class ConfigService:
                 deep_set(config, derived_path, derived_value)
                 applied[derived_path] = derived_value
         # Writers that hold the same lock cannot have written meanwhile; this catches the rest
-        if _revision(self._read_raw(instance_id)) != current:
-            raise ConfigConflict(_revision(self._read_raw(instance_id)))
+        latest = _revision(self._read_raw(instance_id) or b"")
+        if latest != current:
+            raise ConfigConflict(latest)
         self._write_config(instance_id, config)
-        return {"revision": _revision(self._read_raw(instance_id)), "applied": applied}
+        return {"revision": _revision(self._read_raw(instance_id) or b""), "applied": _jsonable(applied)}
 
     @staticmethod
     def _coerce(meta: dict, value: Any) -> Any:

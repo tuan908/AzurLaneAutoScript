@@ -5,7 +5,6 @@ Fake worker targets with the ProcessManager.run_process signature (config_name, 
 so tests can count how many workers were really created.
 """
 import os
-import time
 
 
 def _record_spawn(path):
@@ -16,7 +15,7 @@ def _record_spawn(path):
 def worker_runs(config_name, func, q, ev):
     _record_spawn(func)
     q.put("Scheduler: Start task `Commission`")
-    time.sleep(120)
+    ev.wait(120)
 
 
 def worker_finishes(config_name, func, q, ev):

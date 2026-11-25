@@ -9,6 +9,7 @@ export const HEALTH_LABEL: Record<string, string> = {
   stalled: "stalled",
   crashed: "crashed",
   human_takeover: "needs you",
+  unmanaged: "unmanaged",
 };
 
 export function HealthBadge({ status }: { status: InstanceStatus }) {
@@ -33,7 +34,7 @@ export function HealthPanel({ status }: { status: InstanceStatus }) {
     const t = window.setInterval(() => tick((n) => n + 1), 1000);
     return () => window.clearInterval(t);
   }, []);
-  const health = useQuery({ queryKey: ["health"], queryFn: api.health, refetchInterval: 10000 });
+  const health = useQuery({ queryKey: ["health/details"], queryFn: api.healthDetails, refetchInterval: 10000 });
   const recovery = useQuery({ queryKey: ["recovery"], queryFn: api.recovery, refetchInterval: 10000 });
   const [stallMinutes, setStallMinutes] = useState<string>("");
 
@@ -61,6 +62,7 @@ export function HealthPanel({ status }: { status: InstanceStatus }) {
   const global = recovery.data?.policy;
   const history = (recovery.data?.history ?? []).filter((e) => e.instanceId === status.id);
   const serverChecks = (health.data?.health?.checks ?? []).filter((c) => !c.name.startsWith("instance:"));
+  const metrics = health.data?.metrics;
 
   return (
     <>
@@ -182,6 +184,12 @@ export function HealthPanel({ status }: { status: InstanceStatus }) {
 
       <section className="card">
         <h3>Server checks</h3>
+        {metrics && <dl className="stats">
+          <div><dt>Tasks succeeded</dt><dd>{metrics.taskSuccesses}</dd></div>
+          <div><dt>Tasks failed</dt><dd>{metrics.taskFailures}</dd></div>
+          <div><dt>Automatic restarts</dt><dd>{metrics.workerRestarts}</dd></div>
+          <div><dt>Live connections opened</dt><dd>{metrics.sseConnections}</dd></div>
+        </dl>}
         <ul className="checks">
           {serverChecks.map((c) => (
             <li key={c.name}>

@@ -1,4 +1,6 @@
+import json
 import multiprocessing
+from pathlib import Path
 import time
 
 import pytest
@@ -17,8 +19,8 @@ import control_fakes as fakes
 
 class _QueueOnlyManager:
     @staticmethod
-    def Queue():
-        return multiprocessing.Queue()
+    def Queue(maxsize=0):
+        return multiprocessing.Queue(maxsize)
 
 
 class _AsClient:
@@ -36,6 +38,7 @@ class _AsClient:
 
 @pytest.fixture
 def server(monkeypatch, tmp_path):
+    monkeypatch.setattr("module.webui.process_manager.WORKER_LOCK_DIR", str(tmp_path / "workers"))
     monkeypatch.setattr(State, "manager", _QueueOnlyManager())
     monkeypatch.setattr(ProcessManager, "_processes", {})
     monkeypatch.setattr(ProcessManager, "run_process", staticmethod(fakes.worker_runs))
@@ -155,7 +158,7 @@ def test_no_password_refuses_dns_rebinding(server):
     assert client.get("/api/v1/instances").status_code == 403
 
 
-@pytest.mark.parametrize("origin", ["http://evil.example", "null"])
+@pytest.mark.parametrize("origin", ["http://evil.example", "http://127.0.0.1:22268", "null"])
 def test_cross_site_requests_refused(server, origin):
     client = server()
     r = client.post("/api/v1/instances/alas/start", headers={"Origin": origin})
@@ -202,9 +205,10 @@ def test_tasks_without_provider_is_empty(server):
     assert server().get("/api/v1/instances/alas/tasks").json() == {"running": [], "pending": [], "waiting": []}
 
 
-def test_tasks_first_pending_is_running_only_while_alive():
+def test_tasks_use_actual_running_task():
     class Manager:
         alive = True
+        current_task = "Research"
 
     service = InstanceService(
         list_instances=lambda: ["alas"],
@@ -213,7 +217,7 @@ def test_tasks_first_pending_is_running_only_while_alive():
         tasks=lambda name: {"pending": [{"command": "Commission"}, {"command": "Research"}],
                             "waiting": [{"command": "Daily"}]},
     )
-    assert service.tasks("alas") == {"running": [{"command": "Commission"}], "pending": [{"command": "Research"}],
+    assert service.tasks("alas") == {"running": [{"command": "Research"}], "pending": [{"command": "Commission"}],
                                      "waiting": [{"command": "Daily"}]}
     Manager.alive = False
     assert service.tasks("alas")["running"] == []
@@ -256,11 +260,12 @@ def _api(spawns):
 def test_events_stream_status_then_logs(server):
     server()
     api = _api(server.spawns)
-    response, chunks = _read_events(api, chunks=2)
+    response, chunks = _read_events(api, chunks=3)
     assert response.media_type == "text/event-stream"
     assert chunks[0].startswith("retry:")
-    assert "event: instance.status.changed" in chunks[1]
-    assert '"state": "stopped"' in chunks[1]
+    assert "event: resync" in chunks[1]
+    assert "event: instance.status.changed" in chunks[2]
+    assert '"state": "stopped"' in chunks[2]
 
     # A connection open while a worker logs gets the state change, then the new lines
     import asyncio
@@ -275,7 +280,7 @@ def test_events_stream_status_then_logs(server):
     async def run():
         response = await api.events(Request(scope, never_disconnect))
         iterator = response.body_iterator.__aiter__()
-        out = [await iterator.__anext__(), await iterator.__anext__()]  # retry, stopped
+        out = [await iterator.__anext__() for _ in range(3)]  # retry, resync, stopped
         ProcessManager.get_manager("alas").start(server.spawns)
         while not any("log.appended" in c for c in out):
             out.append(await asyncio.wait_for(iterator.__anext__(), 10))
@@ -294,6 +299,27 @@ def test_events_refuse_cross_site(server):
     assert chunks == []
 
 
+def test_stream_finishes_during_shutdown(server):
+    import asyncio
+    from starlette.requests import Request
+
+    server()
+    api = _api(server.spawns)
+    scope = {"type": "http", "method": "GET", "path": "/api/v1/events", "query_string": b"",
+             "headers": [(b"host", b"127.0.0.1:22267")], "client": ("127.0.0.1", 50000)}
+
+    async def run():
+        response = await api.events(Request(scope))
+        iterator = response.body_iterator.__aiter__()
+        assert (await iterator.__anext__()).startswith("retry:")
+        assert "event: resync" in await iterator.__anext__()
+        api.shutting_down = lambda: True
+        with pytest.raises(StopAsyncIteration):
+            await iterator.__anext__()
+
+    asyncio.get_event_loop().run_until_complete(run())
+
+
 def test_dashboard_served_when_built(tmp_path, server):
     dist = tmp_path / "dist"
     dist.mkdir()
@@ -304,4 +330,21 @@ def test_dashboard_served_when_built(tmp_path, server):
     r = client.get("/dashboard", allow_redirects=False)
     assert r.status_code in (302, 307)
     assert client.get("/dashboard/").text == "<html>dashboard</html>"
+    assert client.get("/dashboard/alas", headers={"Accept": "text/html"}).text == "<html>dashboard</html>"
+    assert client.get("/dashboard/assets/missing.js", headers={"Accept": "text/html"}).status_code == 404
+    assert client.get("/api/v1/missing", headers={"Accept": "text/html"}).status_code == 404
     assert client.get("/").text == "pywebio"
+
+
+def test_health_details_metrics(server):
+    body = server().get("/api/v1/health/details").json()
+    assert body["metrics"] == {"taskSuccesses": 0, "taskFailures": 0, "workerRestarts": 0, "sseConnections": 0}
+    assert [status["id"] for status in body["instanceDetails"]] == ["alas", "alas2"]
+
+
+def test_openapi_matches_dashboard_export(server):
+    from module.control.openapi import document
+
+    snapshot = Path(__file__).resolve().parents[2] / "dashboard" / "openapi.json"
+    assert json.loads(snapshot.read_text(encoding="utf-8")) == document()
+    assert server().get("/api/v1/openapi.json").json()["paths"]["/api/v1/health/details"]["get"]

@@ -251,10 +251,7 @@ class Updater(DeployConfig, GitManager, PipManager):
                 self.state = "reload"
                 with open("./config/reloadalas", mode="w") as f:
                     f.writelines(names)
-                from module.webui.app import clearup
-
                 self._trigger_reload(2)
-                clearup()
             else:
                 self.state = "finish"
         else:

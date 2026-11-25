@@ -1,7 +1,9 @@
 import datetime
 import logging
 import os
+import re
 import sys
+import time
 from typing import Callable, List
 
 from rich.console import Console, ConsoleOptions, ConsoleRenderable, NewLine
@@ -27,8 +29,50 @@ RichHandler.KEYWORDS = []
 
 
 class RichFileHandler(RichHandler):
-    # Rename
-    pass
+    max_bytes = 10 * 1024 * 1024
+    backups = 4
+
+    def __init__(self, name, **kwargs):
+        super().__init__(**kwargs)
+        self.log_name = name
+        self.day = datetime.date.today()
+        self._open()
+
+    def _open(self):
+        os.makedirs("./log", exist_ok=True)
+        self.path = f"./log/{self.day}_{self.log_name}.txt"
+        self.console.file = open(self.path, mode="a", encoding="utf-8")
+        logger.log_file = self.path
+
+    def emit(self, record):
+        if self.console.file.closed:
+            # Uvicorn's logging configuration closes existing handlers, including ours.
+            self._open()
+        day = datetime.date.today()
+        if day != self.day or self.console.file.tell() >= self.max_bytes:
+            self.console.file.close()
+            # Only prune archives created by this handler. Existing daily logs stay intact.
+            archive = f"{self.path[:-4]}.rotated-{time.time_ns()}.txt"
+            try:
+                os.replace(self.path, archive)
+                pattern = re.compile(rf"\d{{4}}-\d{{2}}-\d{{2}}_{re.escape(self.log_name)}\.rotated-\d+\.txt")
+                archives = sorted(name for name in os.listdir("./log") if pattern.fullmatch(name))
+                for name in archives[:-self.backups]:
+                    os.remove(os.path.join("./log", name))
+            except OSError:
+                # Another process can briefly hold a log open on Windows. Retry on a later write.
+                pass
+            self.day = day
+            self._open()
+        super().emit(record)
+
+    def close(self):
+        self.acquire()
+        try:
+            self.console.file.close()
+            super().close()
+        finally:
+            self.release()
 
 
 class RichRenderableHandler(RichHandler):
@@ -155,7 +199,7 @@ console_hdlr = RichHandler(
     show_path=False,
     show_time=False,
     rich_tracebacks=True,
-    tracebacks_show_locals=True,
+    tracebacks_show_locals=False,
     tracebacks_extra_lines=3,
 )
 console_hdlr.setFormatter(console_formatter)
@@ -169,36 +213,30 @@ pyw_name = os.path.splitext(os.path.basename(sys.argv[0]))[0]
 
 
 def set_file_logger(name=pyw_name):
-    log_file = f'./log/{datetime.date.today()}_{name}.txt'
-    try:
-        file = open(log_file, mode='a', encoding='utf-8')
-    except FileNotFoundError:
-        os.mkdir('./log')
-        file = open(log_file, mode='a', encoding='utf-8')
-
     file_console = Console(
-        file=file,
         no_color=True,
         highlight=False,
         width=119,
     )
 
     hdlr = RichFileHandler(
+        name=name,
         console=file_console,
         show_path=False,
         show_time=False,
         show_level=False,
         rich_tracebacks=True,
-        tracebacks_show_locals=True,
+        tracebacks_show_locals=False,
         tracebacks_extra_lines=3,
         highlighter=NullHighlighter(),
     )
     hdlr.setFormatter(file_formatter)
 
-    logger.handlers = [h for h in logger.handlers if not isinstance(
-        h, (logging.FileHandler, RichFileHandler))]
+    for handler in list(logger.handlers):
+        if isinstance(handler, (logging.FileHandler, RichFileHandler)):
+            logger.removeHandler(handler)
+            handler.close()
     logger.addHandler(hdlr)
-    logger.log_file = log_file
 
 
 def set_func_logger(func):
@@ -219,7 +257,7 @@ def set_func_logger(func):
         show_time=False,
         show_level=True,
         rich_tracebacks=True,
-        tracebacks_show_locals=True,
+        tracebacks_show_locals=False,
         tracebacks_extra_lines=2,
         highlighter=Highlighter(),
     )
