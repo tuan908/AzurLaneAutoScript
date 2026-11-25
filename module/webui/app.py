@@ -1553,4 +1553,24 @@ def app():
         on_shutdown=[clearup],
     )
 
+    # Control plane API at /api/v1, sharing ProcessManager with the GUI above
+    from module.control.api import ControlApi, mount_control_api
+    from module.control.instances import InstanceService
+    mount_control_api(app, ControlApi(
+        InstanceService(
+            list_instances=alas_instance,
+            get_manager=ProcessManager.get_manager,
+            default_func=get_config_mod,
+            stop_event=lambda: updater.event,
+        ),
+        password=key,
+        health_details=lambda: {"logQueueManagerAlive": _log_queue_manager_alive()},
+    ))
+
     return app
+
+
+def _log_queue_manager_alive() -> Optional[bool]:
+    """The SyncManager process carrying every worker's log queue"""
+    process = getattr(State.manager, "_process", None)
+    return None if process is None else process.is_alive()
