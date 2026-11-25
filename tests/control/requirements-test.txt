@@ -16,3 +16,7 @@ pytest==7.4.4
 pillow==8.3.2
 # Used by dev_tools/soak_probe.py (P0.1). Same version as requirements.txt.
 psutil==5.9.3
+# Imported by module.webui.process_manager, which the P1 lifecycle tests load.
+# Same versions as requirements.txt.
+rich==11.2.0
+inflection==0.5.1
