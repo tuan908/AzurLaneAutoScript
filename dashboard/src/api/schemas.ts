@@ -1,4 +1,3 @@
-import "zod/compile";
 import * as z from "zod";
 
 // Runtime contract for every response the dashboard reads. Types are inferred from these

@@ -1,5 +1,3 @@
-import "zod/compile";
-
 import * as z from "zod";
 
 export const SettingsSearchSchema = z.object({

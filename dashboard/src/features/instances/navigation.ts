@@ -1,4 +1,3 @@
-import "zod/compile";
 import { useMatches, useNavigate, useParams } from "@tanstack/react-router";
 import * as z from "zod";
 

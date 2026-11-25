@@ -1,5 +1,3 @@
-import "zod/compile";
-
 import * as z from "zod";
 
 export const LANGS = ["en-US", "zh-CN", "zh-TW", "ja-JP"] as const;

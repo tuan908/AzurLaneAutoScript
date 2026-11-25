@@ -1,4 +1,3 @@
-import "zod/compile";
 import * as z from "zod";
 
 import { InstanceStatusSchema, LogLineSchema } from "@/api/schemas";

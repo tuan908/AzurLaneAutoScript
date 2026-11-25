@@ -1,4 +1,3 @@
-import "zod/compile";
 import * as z from "zod";
 
 export const LOG_LEVELS = ["all", "warn", "error"] as const;
