@@ -75,7 +75,7 @@ export function TopBar({ theme, onTheme }: { theme: Theme; onTheme: (t: Theme) =
         {h && (
           <>
             <span className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-edge bg-panel-2 px-2.5 text-[12.5px] text-secondary [&_strong]:font-semibold [&_strong]:text-ink">
-              <strong>{h.instances.running}</strong>/{h.instances.total} running
+              <span><strong>{h.instances.running}</strong>/{h.instances.total}</span> running
             </span>
             <span className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-edge bg-panel-2 px-2.5 text-[12.5px] text-secondary [&_strong]:font-semibold [&_strong]:text-ink">Up <strong>{formatDuration(h.uptimeSeconds)}</strong></span>
           </>
