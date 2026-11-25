@@ -1,4 +1,5 @@
 import { useMutation, useMutationState, useQueryClient } from "@tanstack/react-query";
+import { toast } from "@ui-sdk/react/toast";
 import { api } from "./api";
 import { applyInstanceUpdate, instanceGeneration, instanceKey } from "./instance-cache";
 
@@ -13,7 +14,11 @@ export function useInstanceCommand(id: string) {
       if (epoch !== instanceGeneration(client)) throw new Error("Server changed before command execution");
       return api.command(id, action);
     },
-    onSuccess: (status, variables) => { applyInstanceUpdate(client, status, variables.epoch); },
+    onSuccess: (status, variables) => {
+      applyInstanceUpdate(client, status, variables.epoch);
+      const done = { start: "Started", stop: "Stopped", restart: "Restarted" }[variables.action];
+      toast.success(`${done} ${id}`, { description: status.processId ? `Worker PID ${status.processId}` : undefined });
+    },
     onSettled: () => { void client.invalidateQueries({ queryKey: instanceKey }); },
   });
   return {

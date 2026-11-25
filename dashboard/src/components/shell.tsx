@@ -11,6 +11,7 @@ import { useNow, type Theme } from "../hooks";
 import { formatDuration, healthTone, statusLine } from "../status";
 import { queries } from "../queries";
 import { Icon } from "./ui";
+import { CommandPalette } from "./command-palette";
 const ProfileDialog = lazy(() => import("./profile-dialog"));
 function Brand() {
   return (
@@ -59,6 +60,7 @@ export function TopBar({ theme, onTheme }: { theme: Theme; onTheme: (t: Theme) =
     <header className="col-span-full flex min-h-13 flex-wrap items-center gap-4 border-b border-edge bg-panel px-4 py-2.5 max-[600px]:p-3">
       <Brand />
       <div className="flex flex-wrap items-center gap-2 min-[861px]:ml-auto max-[600px]:gap-1.5">
+        <CommandPalette theme={theme} onTheme={onTheme} />
         <span className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-edge bg-panel-2 px-2.5 text-[12.5px] text-secondary [&_strong]:font-semibold [&_strong]:text-ink" title={connectionError ?? "Live updates from the server"}>
           <span className={`inline-block size-2 shrink-0 rounded-full ${toneDot(connection === "open" ? "ok" : connection === "connecting" ? "warn" : "bad")}`} />
           {connection === "open" ? "Live" : connection === "connecting" ? "Connecting" : "Reconnecting"}
@@ -74,10 +76,10 @@ export function TopBar({ theme, onTheme }: { theme: Theme; onTheme: (t: Theme) =
         </span>}
         {h && (
           <>
-            <span className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-edge bg-panel-2 px-2.5 text-[12.5px] text-secondary [&_strong]:font-semibold [&_strong]:text-ink">
+            <span className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-edge bg-panel-2 px-2.5 text-[12.5px] text-secondary max-[600px]:hidden [&_strong]:font-semibold [&_strong]:text-ink">
               <span><strong>{h.instances.running}</strong>/{h.instances.total}</span> running
             </span>
-            <span className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-edge bg-panel-2 px-2.5 text-[12.5px] text-secondary [&_strong]:font-semibold [&_strong]:text-ink">Up <strong>{formatDuration(h.uptimeSeconds)}</strong></span>
+            <span className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-edge bg-panel-2 px-2.5 text-[12.5px] text-secondary max-[600px]:hidden [&_strong]:font-semibold [&_strong]:text-ink">Up <strong>{formatDuration(h.uptimeSeconds)}</strong></span>
           </>
         )}
         {h?.logQueueManagerAlive === false && <span className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-edge bg-panel-2 px-2.5 text-[12.5px] text-secondary [&_strong]:font-semibold [&_strong]:text-ink text-bad">Log queue down</span>}

@@ -1,3 +1,5 @@
+import { Accordion, AccordionHeader, AccordionItem, AccordionPanel, AccordionTrigger } from "@ui-sdk/react/accordion";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@ui-sdk/react/collapsible";
 import { Input } from "@ui-sdk/react/input";
 import { Switch, SwitchThumb } from "@ui-sdk/react/switch";
 import { Textarea } from "@ui-sdk/react/textarea";
@@ -8,24 +10,36 @@ import { QueryNotice } from "./components/query-content";
 import { queries } from "./queries";
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { type ConfigField, type ConfigTask, type ConfigValue } from "./api";
 
 import { useConfigEditor } from "./use-config-editor";
-
-const LANGS = ["en-US", "zh-CN", "zh-TW", "ja-JP"];
-const LANG_KEY = "alas.lang";
-
-function readLang(): string {
-  try {
-    return localStorage.getItem(LANG_KEY) ?? "en-US";
-  } catch {
-    return "en-US";
-  }
-}
+import { LANGS, readLang, saveLang } from "./lang";
+import { splitHelp } from "./help";
 
 /** "2020-01-01 00:00:00" <-> datetime-local "2020-01-01T00:00:00" */
 const toLocalInput = (v: ConfigValue) => (typeof v === "string" ? v.replace(" ", "T").slice(0, 19) : "");
+
+function Help({ text, about, className = "" }: { text: string; about: string; className?: string }) {
+  const [summary, more] = splitHelp(text);
+  if (!summary) return null;
+  if (!more) return <p className={`whitespace-pre-line text-xs text-subtle ${className}`}>{summary}</p>;
+  return (
+    <Collapsible className={`text-xs text-subtle ${className}`}>
+      <p className="whitespace-pre-line">
+        {summary}{" "}
+        <CollapsibleTrigger className="inline! h-auto! min-h-0! rounded-sm! border-0! bg-transparent! p-0! align-baseline text-xs! font-semibold text-accent! hover:underline [&[data-open]_.more]:hidden [&:not([data-open])_.less]:hidden">
+          <span className="more">More</span><span className="less">Less</span><span className="sr-only"> about {about}</span>
+        </CollapsibleTrigger>
+      </p>
+      <CollapsiblePanel className="mt-1 whitespace-pre-line">{more}</CollapsiblePanel>
+    </Collapsible>
+  );
+}
+
+function SectionLabel({ children }: { children: ReactNode }) {
+  return <span className="text-[11px] font-semibold tracking-[.06em] uppercase text-subtle">{children}</span>;
+}
 
 function Field({
   field,
@@ -76,7 +90,7 @@ function Field({
       </label>
       <div className="flex min-w-0 items-center [&_[data-slot=select-trigger]]:w-full">{control}</div>
       {error && <div className="col-span-full text-xs text-bad">{error}</div>}
-      {field.help && <div className="col-span-full whitespace-pre-line text-xs text-subtle">{field.help}</div>}
+      {field.help && <Help className="col-span-full" text={field.help} about={field.label} />}
     </div>
   );
 }
@@ -98,6 +112,13 @@ export function Settings() {
 
   const tasks = useMemo(() => schema.data?.menus.flatMap((m) => m.tasks) ?? [], [schema.data]);
   const current: ConfigTask | undefined = tasks.find((t) => t.id === taskId) ?? tasks[0];
+  const currentMenu = schema.data?.menus.find((m) => m.tasks.some((t) => t.id === current?.id))?.id;
+  const [openMenus, setOpenMenus] = useState<string[]>([]);
+  const [revealedMenu, setRevealedMenu] = useState<string | undefined>();
+  if (currentMenu !== revealedMenu) {
+    setRevealedMenu(currentMenu);
+    if (currentMenu && !openMenus.includes(currentMenu)) setOpenMenus([...openMenus, currentMenu]);
+  }
 
   const searchHits = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -112,11 +133,7 @@ export function Settings() {
 
   const setLang = (next: string) => {
     setLangState(next);
-    try {
-      localStorage.setItem(LANG_KEY, next);
-    } catch {
-      /* not remembered */
-    }
+    saveLang(next);
   };
 
   const notices = <>
@@ -144,34 +161,48 @@ export function Settings() {
     <>
     {notices}
     <div className="grid min-w-0 grid-cols-1 items-start gap-4 min-[981px]:grid-cols-[250px_minmax(0,1fr)]">
-      <aside className="flex max-h-75 flex-col gap-2.5 overflow-hidden rounded-alas border border-edge bg-panel p-3 shadow-alas min-[981px]:sticky min-[981px]:top-32.5 min-[981px]:max-h-[calc(100vh-150px)] [&_[data-slot=select-trigger]]:w-full" aria-label="Setting groups">
+      <aside className="flex max-h-75 flex-col gap-2.5 overflow-hidden rounded-alas border border-edge bg-panel p-3 shadow-alas min-[981px]:sticky min-[981px]:top-32.5 min-[981px]:max-h-[calc(100vh-150px)]" aria-label="Setting groups">
         <Input aria-label="Search settings" placeholder="Search all settings…" value={search} onValueChange={onSearch} />
-        <Select label="Settings language" items={LANGS} value={lang} onValueChange={setLang} />
-        <div className="-mx-1 overflow-y-auto px-1">
-          {schema.data.menus.map((menu) => (
-            <div key={menu.id}>
-              <div className="mx-2 mt-3 mb-1 text-[11px] font-semibold tracking-[.06em] uppercase text-subtle first:mt-0.5">{menu.name}</div>
-              {menu.tasks.map((task) => (
-                <SdkButton
-                  key={task.id}
-                  className="block! h-auto! w-full rounded-alas-sm! border-0! bg-transparent! px-2.5 py-1.5 text-left text-[13px] text-secondary hover:bg-panel-3! hover:text-ink aria-[current=true]:bg-accent-soft! aria-[current=true]:font-semibold aria-[current=true]:text-accent!"
-                  aria-current={current?.id === task.id && !searchHits ? "true" : undefined}
-                  onClick={() => onTask(task.id)}
-                >
-                  {task.name}
-                </SdkButton>
-              ))}
-            </div>
-          ))}
+        <div className="flex items-center justify-between gap-2">
+          <SectionLabel>Language</SectionLabel>
+          <Select className="min-h-7.5! w-28! min-w-0! text-[12.5px]!" label="Settings language" items={LANGS} value={lang} onValueChange={setLang} />
         </div>
+        <Accordion multiple value={openMenus} onValueChange={(next) => setOpenMenus(next.map(String))}
+          className="-mx-1 flex flex-col gap-0.5 overflow-y-auto border-t border-edge px-1 pt-2">
+          {schema.data.menus.map((menu) => (
+            <AccordionItem key={menu.id} value={menu.id}>
+              <AccordionHeader className="m-0">
+                <AccordionTrigger className="flex! h-auto! min-h-0! w-full items-center justify-between rounded-alas-sm! border-0! bg-transparent! px-2 py-1.5 text-left hover:bg-panel-3!">
+                  <SectionLabel>{menu.name}</SectionLabel>
+                  {menu.tasks.some((t) => t.id === current?.id) && !searchHits && <span className="mr-auto ml-2 size-1.5 rounded-full bg-accent" aria-hidden="true" />}
+                </AccordionTrigger>
+              </AccordionHeader>
+              <AccordionPanel className="pb-1">
+                {menu.tasks.map((task) => (
+                  <SdkButton
+                    key={task.id}
+                    className="block! h-auto! w-full rounded-alas-sm! border-0! bg-transparent! px-2.5 py-1.5 text-left text-[13px] leading-snug whitespace-normal! text-secondary hover:bg-panel-3! hover:text-ink aria-[current=true]:bg-accent-soft! aria-[current=true]:font-semibold aria-[current=true]:text-accent!"
+                    aria-current={current?.id === task.id && !searchHits ? "true" : undefined}
+                    onClick={() => onTask(task.id)}
+                  >
+                    {task.name}
+                  </SdkButton>
+                ))}
+              </AccordionPanel>
+            </AccordionItem>
+          ))}
+        </Accordion>
       </aside>
 
       <section className="flex min-w-0 flex-col gap-4 pb-18">
-        <div className="flex flex-wrap items-baseline gap-2.5">
-          <h3>{searchHits ? `${searchHits.length} matching setting${searchHits.length === 1 ? "" : "s"}` : current?.name}</h3>
-          <span className="text-subtle text-xs font-code">revision {doc.data.revision}</span>
+        <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+          <h2 className="text-lg">{searchHits ? `${searchHits.length} matching setting${searchHits.length === 1 ? "" : "s"}` : current?.name}</h2>
+          {!searchHits && current && <span className="text-xs text-subtle">
+            {current.groups.reduce((n, g) => n + g.fields.length, 0)} settings in {current.groups.length} group{current.groups.length === 1 ? "" : "s"}
+          </span>}
+          <span className="ml-auto font-code text-[11px] text-subtle" title="Config file revision">rev {doc.data.revision}</span>
         </div>
-        {!searchHits && current?.help && <p className="mb-1.5 whitespace-pre-line text-[12.5px] text-subtle">{current.help}</p>}
+        {!searchHits && current?.help && <Help text={current.help} about={current.name} />}
 
         {showBar && (
           <div className="fixed inset-x-3 bottom-5 z-20 mx-auto flex max-w-240 flex-wrap items-center gap-3 rounded-xl border border-edge-strong bg-panel py-2.5 pr-3 pl-4 shadow-alas-lg min-[861px]:right-6 min-[861px]:left-74" role="region" aria-label="Unsaved changes">
@@ -218,7 +249,7 @@ export function Settings() {
           current?.groups.map((group) => (
             <Card key={group.id} className="[&_h3]:mb-0.5">
               <h3>{group.name}</h3>
-              {group.help && <p className="mb-1.5 whitespace-pre-line text-[12.5px] text-subtle">{group.help}</p>}
+              {group.help && <Help className="mb-1.5" text={group.help} about={group.name} />}
               {group.fields.map(renderField)}
             </Card>
           ))
