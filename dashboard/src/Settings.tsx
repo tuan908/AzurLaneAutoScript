@@ -43,7 +43,12 @@ function Field({
   if (field.readOnly) {
     control = <span className="readonly">{value === null ? "—" : String(value)}</span>;
   } else if (field.type === "checkbox") {
-    control = <input id={id} type="checkbox" checked={value === true} onChange={(e) => onChange(e.target.checked)} />;
+    control = (
+      <span className="switch">
+        <input id={id} type="checkbox" checked={value === true} onChange={(e) => onChange(e.target.checked)} />
+        <span className="track" aria-hidden="true" />
+      </span>
+    );
   } else if (field.type === "select") {
     const options = field.options ?? [];
     const known = options.some((o) => String(o.value) === String(value));
@@ -77,11 +82,11 @@ function Field({
     <div className={`field ${edited ? "field-edited" : ""} ${error ? "field-error" : ""}`}>
       <label htmlFor={id}>
         {field.label}
-        <span className="muted small path">{field.path}</span>
+        <span className="path">{field.path}</span>
       </label>
       <div className="field-control">{control}</div>
-      {error && <div className="error small">{error}</div>}
-      {field.help && <div className="muted small help">{field.help}</div>}
+      {error && <div className="field-error-text">{error}</div>}
+      {field.help && <div className="help">{field.help}</div>}
     </div>
   );
 }
@@ -166,12 +171,12 @@ export function Settings({ id }: { id: string }) {
   };
 
   if (schema.isError) {
-    return <div className="card error">{(schema.error as Error).message}</div>;
+    return <div className="banner tone-bad" role="alert"><div className="banner-body">{(schema.error as Error).message}</div></div>;
   }
   if (doc.isError && !doc.data) {
-    return <div className="card error" role="alert">{doc.error.message}</div>;
+    return <div className="banner tone-bad" role="alert"><div className="banner-body">{doc.error.message}</div></div>;
   }
-  if (!schema.data || !doc.data) return <div className="card muted">Loading settings…</div>;
+  if (!schema.data || !doc.data) return <div className="card"><div className="skeleton" /></div>;
 
   const editCount = Object.keys(edits).length;
   const renderField = (field: ConfigField) => (
@@ -185,82 +190,99 @@ export function Settings({ id }: { id: string }) {
     />
   );
 
+  const showBar = editCount > 0 || notice !== null || conflict || save.isError;
+
   return (
     <div className="settings">
-      <aside className="settings-nav card">
-        <input aria-label="Search settings" placeholder="Search settings" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <aside className="settings-nav" aria-label="Setting groups">
+        <input aria-label="Search settings" placeholder="Search all settings…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select aria-label="Settings language" value={lang} onChange={(e) => setLang(e.target.value)}>
           {LANGS.map((l) => (
             <option key={l}>{l}</option>
           ))}
         </select>
-        {schema.data.menus.map((menu) => (
-          <div key={menu.id} className="menu">
-            <div className="menu-name">{menu.name}</div>
-            {menu.tasks.map((task) => (
-              <button
-                key={task.id}
-                className={`task-link ${current?.id === task.id && !searchHits ? "active" : ""}`}
-                onClick={() => {
-                  setSearch("");
-                  setTaskId(task.id);
-                }}
-              >
-                {task.name}
-              </button>
-            ))}
-          </div>
-        ))}
+        <div className="tree">
+          {schema.data.menus.map((menu) => (
+            <div key={menu.id}>
+              <div className="menu-name">{menu.name}</div>
+              {menu.tasks.map((task) => (
+                <button
+                  key={task.id}
+                  className={`task-link ${current?.id === task.id && !searchHits ? "active" : ""}`}
+                  aria-current={current?.id === task.id && !searchHits ? "true" : undefined}
+                  onClick={() => {
+                    setSearch("");
+                    setTaskId(task.id);
+                  }}
+                >
+                  {task.name}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
       </aside>
 
       <section className="settings-body">
-        <div className="card save-bar">
-          <strong>{searchHits ? `${searchHits.length} match(es)` : current?.name}</strong>
-          <span className="muted small">revision {doc.data.revision}</span>
-          {notice && <span className="ok small">{notice}</span>}
-          {conflict && (
-            <span className="error small">
-              The config changed elsewhere (GUI or a running task).{" "}
-              <button
-                className="secondary"
-                onClick={() => {
-                  setEdits({});
-                  setConflict(false);
-                  void qc.invalidateQueries({ queryKey: ["config", id] });
-                }}
-              >
-                Reload, discard my edits
-              </button>
-            </span>
-          )}
-          {save.isError && !conflict && !Object.keys(errors).length && (
-            <span className="error small">{(save.error as Error).message}</span>
-          )}
-          <div className="actions">
-            <button className="secondary" disabled={!editCount || save.isPending} onClick={() => (setEdits({}), setErrors({}))}>
-              Discard
-            </button>
-            <button disabled={!editCount || save.isPending || conflict} onClick={() => save.mutate()}>
-              Save{editCount ? ` (${editCount})` : ""}
-            </button>
-          </div>
+        <div className="settings-title">
+          <h3>{searchHits ? `${searchHits.length} matching setting${searchHits.length === 1 ? "" : "s"}` : current?.name}</h3>
+          <span className="muted small mono">revision {doc.data.revision}</span>
         </div>
+        {!searchHits && current?.help && <p className="group-help">{current.help}</p>}
+
+        {showBar && (
+          <div className="save-bar" role="region" aria-label="Unsaved changes">
+            <span className="msg">
+              {conflict ? (
+                <span className="text-bad">The config changed elsewhere (GUI or a running task).</span>
+              ) : save.isError && !Object.keys(errors).length ? (
+                <span className="text-bad">{(save.error as Error).message}</span>
+              ) : Object.keys(errors).length ? (
+                <span className="text-bad">Fix the highlighted values; nothing was saved.</span>
+              ) : notice && !editCount ? (
+                <span className="text-ok">{notice}</span>
+              ) : (
+                <span>{editCount} unsaved change{editCount === 1 ? "" : "s"}</span>
+              )}
+            </span>
+            <div className="actions">
+              {conflict && (
+                <button
+                  className="btn"
+                  onClick={() => {
+                    setEdits({});
+                    setConflict(false);
+                    void qc.invalidateQueries({ queryKey: ["config", id] });
+                  }}
+                >
+                  Reload, discard my edits
+                </button>
+              )}
+              <button className="btn" disabled={!editCount || save.isPending} onClick={() => (setEdits({}), setErrors({}))}>
+                Discard
+              </button>
+              <button className="btn btn-primary" disabled={!editCount || save.isPending || conflict} onClick={() => save.mutate()}>
+                Save{editCount ? ` (${editCount})` : ""}
+              </button>
+            </div>
+          </div>
+        )}
 
         {searchHits ? (
-          <div className="card">
-            {searchHits.length === 0 && <div className="muted">No setting matches.</div>}
-            {searchHits.map(({ task, field }) => (
+          <div className="card group-card">
+            {searchHits.length === 0 && <div className="empty">No setting matches.</div>}
+            {searchHits.map(({ task, field }, i) => (
               <div key={field.path}>
-                <div className="muted small">{task.name}</div>
+                {(i === 0 || searchHits[i - 1].task.id !== task.id) && <div className="hit-task">{task.name}</div>}
                 {renderField(field)}
               </div>
             ))}
           </div>
         ) : (
           current?.groups.map((group) => (
-            <div key={group.id} className="card">
+            <div key={group.id} className="card group-card">
               <h3>{group.name}</h3>
-              {group.help && <p className="muted small help">{group.help}</p>}
+              {group.help && <p className="group-help">{group.help}</p>}
               {group.fields.map(renderField)}
             </div>
           ))

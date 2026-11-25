@@ -64,160 +64,118 @@ export function HealthPanel({ status }: { status: InstanceStatus }) {
   const serverChecks = (health.data?.health?.checks ?? []).filter((c) => !c.name.startsWith("instance:"));
   const metrics = health.data?.metrics;
 
+  const actionTone = (action: string) =>
+    action === "restarted" ? "ok" : action === "scheduled" ? "warn" : action === "gave_up" || action === "restart_failed" ? "bad" : "idle";
+
   return (
     <>
-      <section className="card">
-        <div className="card-head">
-          <h3>Instance health</h3>
-          <HealthBadge status={status} />
+      <dl className="metrics">
+        <div className="metric"><dt>Health</dt><dd>{h ? HEALTH_LABEL[h.state] ?? h.state : "—"}</dd></div>
+        <div className="metric">
+          <dt>Restarts last hour</dt>
+          <dd>{rec ? rec.restartsLastHour : "—"}{global ? <small> / {global.maxRestartsPerHour}</small> : null}</dd>
         </div>
-        {h ? (
-          <dl className="stats">
-            <div>
-              <dt>State</dt>
-              <dd>{HEALTH_LABEL[h.state] ?? h.state}</dd>
-            </div>
-            <div>
-              <dt>Detail</dt>
-              <dd>{h.detail || "—"}</dd>
-            </div>
-            <div>
-              <dt>Restarts last hour</dt>
-              <dd>
-                {rec!.restartsLastHour}
-                {global ? ` / ${global.maxRestartsPerHour}` : ""}
-              </dd>
-            </div>
-            <div>
-              <dt>Recovery</dt>
-              <dd>
-                {rec!.gaveUp
-                  ? "gave up — start it manually"
-                  : rec!.nextAttemptAt
-                    ? `restart (${rec!.pendingReason}) in ${untilText(rec!.nextAttemptAt)}`
-                    : "nothing pending"}
-              </dd>
-            </div>
-          </dl>
-        ) : (
-          <div className="muted">The health monitor has not checked this instance yet.</div>
-        )}
-        {h?.state === "human_takeover" && (
-          <p className="error small">
-            Alas stopped and asked for a person (for example a task failed 3 times, or the emulator is not
-            reachable). It is never restarted automatically — check the log, fix the cause, then start it.
-          </p>
-        )}
-      </section>
+        <div className="metric">
+          <dt>Next recovery</dt>
+          <dd>{rec?.gaveUp ? <span className="text-bad">Gave up</span>
+            : rec?.nextAttemptAt ? <>{untilText(rec.nextAttemptAt)} <small>{rec.pendingReason}</small></> : "None"}</dd>
+        </div>
+        {metrics && <div className="metric"><dt>Automatic restarts</dt><dd>{metrics.workerRestarts}<small> since server start</small></dd></div>}
+      </dl>
+      {h?.detail && <p className="muted small">{h.detail}</p>}
 
-      <section className="card">
-        <h3>Recovery for {status.id}</h3>
-        <div className="field">
-          <label htmlFor="r-auto">
-            Restart when the worker crashes
-            <span className="muted small">Not after a deliberate stop, a normal finish, an update or a human-takeover request</span>
-          </label>
-          <div className="field-control">
-            <input
-              id="r-auto"
-              type="checkbox"
-              checked={policy.autoRestart}
-              disabled={update.isPending}
-              onChange={(e) => update.mutate({ autoRestart: e.target.checked })}
-            />
+      <div className="grid grid-2">
+        <section className="card">
+          <div className="card-head"><h3>Recovery for {status.id}</h3></div>
+          <div className="option-row">
+            <label htmlFor="r-auto">
+              Restart when the worker crashes
+              <span>Never after a deliberate stop, a normal finish, an update or a human-takeover request</span>
+            </label>
+            <span className="switch">
+              <input id="r-auto" type="checkbox" checked={policy.autoRestart} disabled={update.isPending}
+                onChange={(e) => update.mutate({ autoRestart: e.target.checked })} />
+              <span className="track" aria-hidden="true" />
+            </span>
           </div>
-        </div>
-        <div className="field">
-          <label htmlFor="r-stall">
-            Restart when a task stalls
-            <span className="muted small">A task is running but nothing was logged for the stall time</span>
-          </label>
-          <div className="field-control">
-            <input
-              id="r-stall"
-              type="checkbox"
-              checked={policy.restartOnStall}
-              disabled={update.isPending}
-              onChange={(e) => update.mutate({ restartOnStall: e.target.checked })}
-            />
+          <div className="option-row">
+            <label htmlFor="r-stall">
+              Restart when a task stalls
+              <span>A task is running but nothing was logged for the stall time</span>
+            </label>
+            <span className="switch">
+              <input id="r-stall" type="checkbox" checked={policy.restartOnStall} disabled={update.isPending}
+                onChange={(e) => update.mutate({ restartOnStall: e.target.checked })} />
+              <span className="track" aria-hidden="true" />
+            </span>
           </div>
-        </div>
-        <div className="field">
-          <label htmlFor="r-stall-min">
-            Stall time (minutes)
-            <span className="muted small">0 turns stall detection off</span>
-          </label>
-          <div className="field-control">
-            <input
-              id="r-stall-min"
-              type="number"
-              min={0}
-              max={1440}
-              value={stallMinutes}
+          <div className="option-row">
+            <label htmlFor="r-stall-min">
+              Stall time (minutes)
+              <span>0 turns stall detection off</span>
+            </label>
+            <input id="r-stall-min" type="number" min={0} max={1440} value={stallMinutes}
               onChange={(e) => setStallMinutes(e.target.value)}
               onBlur={() => {
                 const n = Number(stallMinutes);
                 if (Number.isInteger(n) && n !== policy.stallMinutes) update.mutate({ stallMinutes: n });
-              }}
-            />
+              }} />
           </div>
-        </div>
-        {update.error && <div className="error small">{(update.error as Error).message}</div>}
-        {global && (
-          <p className="muted small">
-            All instances: at most{" "}
-            <input
-              className="inline-number"
-              type="number"
-              min={0}
-              max={60}
-              defaultValue={global.maxRestartsPerHour}
-              onBlur={(e) => {
-                const n = Number(e.target.value);
-                if (Number.isInteger(n) && n !== global.maxRestartsPerHour) updateGlobal.mutate({ maxRestartsPerHour: n });
-              }}
-            />{" "}
-            restarts per hour, waiting {global.backoffSeconds.join("s, ")}s between attempts.
-          </p>
-        )}
-      </section>
+          {global && (
+            <div className="option-row">
+              <label htmlFor="r-max">
+                Restarts per hour, all instances
+                <span>Waits {global.backoffSeconds.join("s, ")}s between attempts, then gives up</span>
+              </label>
+              <input id="r-max" type="number" min={0} max={60} defaultValue={global.maxRestartsPerHour}
+                onBlur={(e) => {
+                  const n = Number(e.target.value);
+                  if (Number.isInteger(n) && n !== global.maxRestartsPerHour) updateGlobal.mutate({ maxRestartsPerHour: n });
+                }} />
+            </div>
+          )}
+          {(update.error || updateGlobal.error) && (
+            <p className="text-bad small">{((update.error || updateGlobal.error) as Error).message}</p>
+          )}
+        </section>
+
+        <section className="card">
+          <div className="card-head"><h3>Server checks</h3></div>
+          <ul className="check-list">
+            {serverChecks.map((c) => (
+              <li key={c.name}>
+                <span className={`dot tone-${c.status === "ok" ? "ok" : c.status === "warn" ? "warn" : "bad"}`} />
+                <strong>{c.name}</strong>
+                <span className="muted small">{c.detail}</span>
+              </li>
+            ))}
+          </ul>
+          {metrics && (
+            <dl className="kv" style={{ marginTop: 12 }}>
+              <dt>Tasks succeeded</dt><dd>{metrics.taskSuccesses}</dd>
+              <dt>Tasks failed</dt><dd>{metrics.taskFailures}</dd>
+              <dt>Live connections opened</dt><dd>{metrics.sseConnections}</dd>
+            </dl>
+          )}
+        </section>
+      </div>
 
       <section className="card">
-        <h3>Server checks</h3>
-        {metrics && <dl className="stats">
-          <div><dt>Tasks succeeded</dt><dd>{metrics.taskSuccesses}</dd></div>
-          <div><dt>Tasks failed</dt><dd>{metrics.taskFailures}</dd></div>
-          <div><dt>Automatic restarts</dt><dd>{metrics.workerRestarts}</dd></div>
-          <div><dt>Live connections opened</dt><dd>{metrics.sseConnections}</dd></div>
-        </dl>}
-        <ul className="checks">
-          {serverChecks.map((c) => (
-            <li key={c.name}>
-              <span className={`dot dot-${c.status}`} />
-              <strong>{c.name}</strong>
-              <span className="muted small">{c.detail}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="card">
-        <h3>Recovery history</h3>
+        <div className="card-head"><h3>Recovery history</h3><span className="muted small">newest first, kept until the server restarts</span></div>
         {history.length === 0 ? (
-          <div className="muted small">No recovery actions for this instance.</div>
+          <div className="empty">No recovery actions for this instance.</div>
         ) : (
-          <table className="history">
-            <tbody>
-              {history.map((e, i) => (
-                <tr key={i}>
-                  <td className="muted small">{new Date(e.time).toLocaleString()}</td>
-                  <td>{e.action}</td>
-                  <td>{e.reason}</td>
-                  <td className="muted small">{e.detail}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ol className="timeline">
+            {history.map((e, i) => (
+              <li key={i}>
+                <span className={`dot tone-${actionTone(e.action)}`} />
+                <div>
+                  <div className="what">{e.action.replace("_", " ")} <span className="muted">· {e.reason}</span></div>
+                  <div className="when">{new Date(e.time).toLocaleString()}{e.detail ? ` — ${e.detail}` : ""}</div>
+                </div>
+              </li>
+            ))}
+          </ol>
         )}
       </section>
     </>
