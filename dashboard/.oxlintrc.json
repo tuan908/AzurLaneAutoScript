@@ -1,0 +1,27 @@
+{
+  "plugins": [
+    "react",
+    "jsx-a11y",
+    "typescript",
+    "unicorn",
+    "oxc"
+  ],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error"
+  },
+  "ignorePatterns": [
+    "src/api.generated.ts",
+    "dist/**"
+  ],
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "react/incompatible-library": "warn",
+    "jsx-a11y/no-noninteractive-tabindex": "off",
+    "jsx-a11y/prefer-tag-over-role": "off",
+    "unicorn/no-array-reverse": "off",
+    "react/exhaustive-effect-dependencies": "error",
+    "react/set-state-in-effect": "error",
+    "typescript/no-explicit-any": "error"
+  }
+}

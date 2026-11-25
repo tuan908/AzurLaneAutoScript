@@ -19,13 +19,13 @@ export function parseTime(value: string): number {
   return new Date(local ? value.replace(" ", "T") : value).getTime();
 }
 
-export function since(iso: string | null | undefined, now = Date.now()): string {
+export function since(iso: string | null | undefined, now: number): string {
   if (!iso) return "—";
   return formatDuration((now - parseTime(iso)) / 1000);
 }
 
 /** "in 2h 5m", or "due now" once the time has passed */
-export function untilNextRun(value: string, now = Date.now()): string {
+export function untilNextRun(value: string, now: number): string {
   const t = parseTime(value);
   if (Number.isNaN(t)) return value;
   const seconds = (t - now) / 1000;
@@ -45,7 +45,7 @@ export function healthTone(s: InstanceStatus): { tone: Tone; label: string } {
   return { tone: "idle", label: "Stopped" };
 }
 
-export function statusLine(s: InstanceStatus, now = Date.now()): string {
+export function statusLine(s: InstanceStatus, now: number): string {
   switch (s.state) {
     case "running":
       return s.currentTask ? `Running ${s.currentTask}` : "Waiting for the next task";

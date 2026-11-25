@@ -3,6 +3,7 @@ import { LogStore } from "./logStore";
 
 const lines = (from: number, to: number) =>
   Array.from({ length: to - from + 1 }, (_, i) => ({ seq: from + i, text: `line ${from + i}` }));
+const line = (seq: number, text = `line ${seq}`) => ({ seq, text });
 
 describe("LogStore", () => {
   it("caps lines per instance", () => {
@@ -38,5 +39,13 @@ describe("LogStore", () => {
     store.append("b", lines(1, 1));
     expect(store.get("a")).toHaveLength(2);
     expect(store.get("b")).toHaveLength(1);
+  });
+
+  it("orders and deduplicates both backlog and live batches", () => {
+    const store = new LogStore(4);
+    store.reset("alas", [line(3), line(1), line(3, "replacement"), line(2)]);
+    expect(store.get("alas")).toEqual([line(1), line(2), line(3, "replacement")]);
+    store.append("alas", [line(5), line(4), line(5), line(1, "obsolete")]);
+    expect(store.get("alas")).toEqual([line(2), line(3, "replacement"), line(4), line(5)]);
   });
 });

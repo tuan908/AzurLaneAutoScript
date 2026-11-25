@@ -46,16 +46,20 @@ function currentToken() {
   return getToken() || memoryToken;
 }
 
-async function request<T>(path: string, method: "GET" | "POST" | "PATCH" = "GET", json?: unknown): Promise<T> {
+async function request<T>(path: string, method: "GET" | "POST" | "PATCH" = "GET", json?: unknown, signal?: AbortSignal): Promise<T> {
   const token = currentToken();
   const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
   if (json !== undefined) headers["Content-Type"] = "application/json";
   const res = await fetch(API + path, {
     method,
     headers,
-    body: json === undefined ? undefined : JSON.stringify(json),
+    ...(signal ? { signal } : {}),
+    ...(json === undefined ? {} : { body: JSON.stringify(json) }),
   });
-  const body = await res.json().catch(() => ({}));
+  const body = await res.json().catch((error: unknown) => {
+    if (res.ok || signal?.aborted) throw error;
+    return {};
+  });
   if (!res.ok) {
     const err = (body as { error?: { code: string; message: string } }).error;
     throw new ApiError(res.status, err?.code ?? "http_error", err?.message ?? res.statusText, body);
@@ -64,20 +68,20 @@ async function request<T>(path: string, method: "GET" | "POST" | "PATCH" = "GET"
 }
 
 export const api = {
-  health: () => request<Schemas["Health"]>("/health"),
-  healthDetails: () => request<Schemas["HealthDetails"]>("/health/details"),
-  instances: () => request<Schemas["Instances"]>("/instances").then((r) => r.instances),
+  health: (signal?: AbortSignal) => request<Schemas["Health"]>("/health", "GET", undefined, signal),
+  healthDetails: (signal?: AbortSignal) => request<Schemas["HealthDetails"]>("/health/details", "GET", undefined, signal),
+  instances: (signal?: AbortSignal) => request<Schemas["Instances"]>("/instances", "GET", undefined, signal).then((r) => r.instances),
   instance: (id: string) => request<InstanceStatus>(`/instances/${encodeURIComponent(id)}`),
   createProfile: (id: string, source: string | null) => request<InstanceStatus>("/instances", "POST", { id, source }),
-  tasks: (id: string) => request<Schemas["Tasks"]>(`/instances/${encodeURIComponent(id)}/tasks`),
-  logs: (id: string, after = 0, limit = 2000) =>
-    request<Schemas["LogChunk"]>(`/instances/${encodeURIComponent(id)}/logs?after=${after}&limit=${limit}`),
+  tasks: (id: string, signal?: AbortSignal) => request<Schemas["Tasks"]>(`/instances/${encodeURIComponent(id)}/tasks`, "GET", undefined, signal),
+  logs: (id: string, after = 0, limit = 2000, signal?: AbortSignal) =>
+    request<Schemas["LogChunk"]>(`/instances/${encodeURIComponent(id)}/logs?after=${after}&limit=${limit}`, "GET", undefined, signal),
   command: (id: string, action: "start" | "stop" | "restart") =>
     request<InstanceStatus>(`/instances/${encodeURIComponent(id)}/${action}`, "POST"),
-  configSchema: (id: string, lang: string) =>
-    request<Schemas["ConfigSchema"]>(`/instances/${encodeURIComponent(id)}/config/schema?lang=${encodeURIComponent(lang)}`),
-  config: (id: string) => request<Schemas["ConfigDoc"]>(`/instances/${encodeURIComponent(id)}/config`),
-  recovery: () => request<Schemas["RecoverySnapshot"]>("/recovery"),
+  configSchema: (id: string, lang: string, signal?: AbortSignal) =>
+    request<Schemas["ConfigSchema"]>(`/instances/${encodeURIComponent(id)}/config/schema?lang=${encodeURIComponent(lang)}`, "GET", undefined, signal),
+  config: (id: string, signal?: AbortSignal) => request<Schemas["ConfigDoc"]>(`/instances/${encodeURIComponent(id)}/config`, "GET", undefined, signal),
+  recovery: (signal?: AbortSignal) => request<Schemas["RecoverySnapshot"]>("/recovery", "GET", undefined, signal),
   updatePolicy: (changes: operations["recovery_policy"]["requestBody"]["content"]["application/json"]) =>
     request<Schemas["PolicyApplied"]>("/recovery/policy", "PATCH", changes),
   updateConfig: (id: string, revision: string, changes: Record<string, ConfigValue>) =>

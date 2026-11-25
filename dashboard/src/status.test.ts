@@ -1,15 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { InstanceStatus } from "./api";
+import { instanceFixture as make } from "./test-fixtures";
 import { formatDuration, healthTone, statusLine, untilNextRun } from "./status";
 
-const base = {
-  id: "alas", state: "stopped", processId: null, startedAt: null, stoppedAt: null, exitCode: null,
-  currentTask: null, lastActivityAt: null, lastError: null, legacyState: 2, revision: 0,
-} as unknown as InstanceStatus;
-
-const make = (over: Record<string, unknown>) => ({ ...base, ...over }) as InstanceStatus;
-const health = (state: string, gaveUp = false) => ({
-  state, detail: "", recovery: { policy: {}, restartsLastHour: 0, nextAttemptAt: null, pendingReason: null, gaveUp },
+type Health = NonNullable<InstanceStatus["health"]>;
+const health = (state: Health["state"], gaveUp = false): Health => ({
+  state, detail: "", recovery: {
+    policy: { autoRestart: false, restartOnStall: false, stallMinutes: 30 },
+    restartsLastHour: 0, nextAttemptAt: null, pendingReason: null, gaveUp,
+  },
 });
 
 describe("formatDuration", () => {
@@ -46,9 +45,9 @@ describe("healthTone", () => {
 
 describe("statusLine", () => {
   it("describes what the instance is doing", () => {
-    expect(statusLine(make({ state: "running", currentTask: "Research" }))).toBe("Running Research");
-    expect(statusLine(make({ state: "running" }))).toBe("Waiting for the next task");
-    expect(statusLine(make({ state: "failed", lastError: "Worker exited with code 1" }))).toBe("Worker exited with code 1");
-    expect(statusLine(make({ state: "stopped" }))).toBe("Not started");
+    expect(statusLine(make({ state: "running", currentTask: "Research" }), 0)).toBe("Running Research");
+    expect(statusLine(make({ state: "running" }), 0)).toBe("Waiting for the next task");
+    expect(statusLine(make({ state: "failed", lastError: "Worker exited with code 1" }), 0)).toBe("Worker exited with code 1");
+    expect(statusLine(make({ state: "stopped" }), 0)).toBe("Not started");
   });
 });
