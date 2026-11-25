@@ -9,8 +9,16 @@ const paths = {
 export function Icon({ name }: { name: keyof typeof paths }) {
   const filled = name === "play" || name === "stop";
   return (
-    <svg className="size-4 shrink-0" viewBox="0 0 16 16" aria-hidden="true" fill={filled ? "currentColor" : "none"}
-      stroke={filled ? "none" : "currentColor"} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className="size-4 shrink-0"
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      fill={filled ? "currentColor" : "none"}
+      stroke={filled ? "none" : "currentColor"}
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d={paths[name]} />
     </svg>
   );

@@ -18,11 +18,16 @@ export class EventDecoder {
       const boundary = index + end;
       if (this.buffer[boundary] === "\r" && boundary === this.buffer.length - 1) break;
       const line = this.buffer.slice(index, boundary);
-      index = boundary + (this.buffer[boundary] === "\r" && this.buffer[boundary + 1] === "\n" ? 2 : 1);
+      index =
+        boundary + (this.buffer[boundary] === "\r" && this.buffer[boundary + 1] === "\n" ? 2 : 1);
       this.size += line.length + 1;
       if (this.size > this.maxSize) throw new Error("SSE frame exceeds buffer limit");
       if (!line) {
-        if (this.data.length) frames.push({ event: this.event || "message", data: this.data.join("\n") });
+        if (this.data.length)
+          frames.push({
+            event: this.event || "message",
+            data: this.data.join("\n"),
+          });
         this.event = "";
         this.data = [];
         this.size = 0;
@@ -35,7 +40,8 @@ export class EventDecoder {
       }
     }
     this.buffer = this.buffer.slice(index);
-    if (this.size + this.buffer.length > this.maxSize) throw new Error("SSE frame exceeds buffer limit");
+    if (this.size + this.buffer.length > this.maxSize)
+      throw new Error("SSE frame exceeds buffer limit");
     return frames;
   }
 }
@@ -63,7 +69,10 @@ export function startEventStream(options: TransportOptions): () => void {
     let watchdog: ReturnType<typeof setTimeout> | undefined;
     const arm = () => {
       clearTimeout(watchdog);
-      watchdog = setTimeout(() => controller.abort(new Error("SSE connection timed out")), options.idleMs ?? 45_000);
+      watchdog = setTimeout(
+        () => controller.abort(new Error("SSE connection timed out")),
+        options.idleMs ?? 45_000,
+      );
     };
     const decoder = new EventDecoder();
     let reader: ReadableStreamDefaultReader<string> | undefined;
@@ -72,9 +81,12 @@ export function startEventStream(options: TransportOptions): () => void {
       arm();
       const response = await options.open(controller.signal);
       if (!response.ok || !response.body) throw new Error(`SSE returned HTTP ${response.status}`);
-      if (!response.headers.get("content-type")?.includes("text/event-stream")) throw new Error("Unexpected SSE content type");
+      if (!response.headers.get("content-type")?.includes("text/event-stream"))
+        throw new Error("Unexpected SSE content type");
       reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-      const cancelRead = () => { void reader?.cancel().catch(() => undefined); };
+      const cancelRead = () => {
+        void reader?.cancel().catch(() => undefined);
+      };
       controller.signal.addEventListener("abort", cancelRead, { once: true });
       try {
         while (!controller.signal.aborted) {
@@ -91,9 +103,12 @@ export function startEventStream(options: TransportOptions): () => void {
           }
         }
         controller.signal.throwIfAborted();
-      } finally { controller.signal.removeEventListener("abort", cancelRead); }
+      } finally {
+        controller.signal.removeEventListener("abort", cancelRead);
+      }
     } catch (error) {
-      if (!lifetime.signal.aborted) options.onFailure(controller.signal.aborted ? controller.signal.reason : error);
+      if (!lifetime.signal.aborted)
+        options.onFailure(controller.signal.aborted ? controller.signal.reason : error);
     } finally {
       clearTimeout(watchdog);
       controller.abort();
@@ -107,5 +122,8 @@ export function startEventStream(options: TransportOptions): () => void {
     }
   }
   void attempt();
-  return () => { lifetime.abort(); clearTimeout(retry); };
+  return () => {
+    lifetime.abort();
+    clearTimeout(retry);
+  };
 }

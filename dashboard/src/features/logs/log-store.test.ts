@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
+
 import { LogStore } from "./log-store";
 
 const lines = (from: number, to: number) =>
-  Array.from({ length: to - from + 1 }, (_, i) => ({ seq: from + i, text: `line ${from + i}` }));
+  Array.from({ length: to - from + 1 }, (_, i) => ({
+    seq: from + i,
+    text: `line ${from + i}`,
+  }));
 const line = (seq: number, text = `line ${seq}`) => ({ seq, text });
 
 describe("LogStore", () => {

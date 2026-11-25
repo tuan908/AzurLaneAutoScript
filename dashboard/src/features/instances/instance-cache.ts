@@ -1,20 +1,35 @@
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
-import { api, ApiError, type InstanceStatus } from "../../api/client";
+
+import { api, ApiError, type InstanceStatus } from "@/api/client";
 
 export const instanceKey = ["instances"] as const;
 export const taskKey = (id: string) => ["tasks", id] as const;
 
-type Generation = { streamId: string; epoch: number; awaitingSnapshot: boolean };
+type Generation = {
+  streamId: string;
+  epoch: number;
+  awaitingSnapshot: boolean;
+};
 const generations = new WeakMap<QueryClient, Generation>();
-export function instanceGeneration(client: QueryClient): number { return generations.get(client)?.epoch ?? 0; }
+export function instanceGeneration(client: QueryClient): number {
+  return generations.get(client)?.epoch ?? 0;
+}
 
-export async function beginInstanceGeneration(client: QueryClient, streamId: string, signal?: AbortSignal): Promise<boolean> {
+export async function beginInstanceGeneration(
+  client: QueryClient,
+  streamId: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
   const previous = generations.get(client);
   if (previous?.streamId === streamId) return false;
   // Cancel old snapshots before accepting a lower revision from a new server.
   await client.cancelQueries({ queryKey: instanceKey, exact: true });
   if (signal?.aborted) return false;
-  generations.set(client, { streamId, epoch: (previous?.epoch ?? 0) + 1, awaitingSnapshot: true });
+  generations.set(client, {
+    streamId,
+    epoch: (previous?.epoch ?? 0) + 1,
+    awaitingSnapshot: true,
+  });
   return true;
 }
 
@@ -32,29 +47,46 @@ export function instanceOptions(client: QueryClient) {
         return incoming;
       }
       // Query stores one result type for this key, but its structural sharing callback takes unknown.
-      return reconcileSnapshot(previous as InstanceStatus[] | undefined, incoming as InstanceStatus[]);
+      return reconcileSnapshot(
+        previous as InstanceStatus[] | undefined,
+        incoming as InstanceStatus[],
+      );
     },
   });
 }
 
-export function reconcileSnapshot(previous: InstanceStatus[] | undefined, incoming: InstanceStatus[]): InstanceStatus[] {
-  const byId = new Map(previous?.map(status => [status.id, status]));
-  return incoming.map(status => {
+export function reconcileSnapshot(
+  previous: InstanceStatus[] | undefined,
+  incoming: InstanceStatus[],
+): InstanceStatus[] {
+  const byId = new Map(previous?.map((status) => [status.id, status]));
+  return incoming.map((status) => {
     const old = byId.get(status.id);
     return old && old.revision > status.revision ? old : status;
   });
 }
 
-export function applyInstanceUpdate(client: QueryClient, incoming: InstanceStatus, epoch = instanceGeneration(client)): boolean {
-  if (epoch !== instanceGeneration(client) || generations.get(client)?.awaitingSnapshot) return false;
+export function applyInstanceUpdate(
+  client: QueryClient,
+  incoming: InstanceStatus,
+  epoch = instanceGeneration(client),
+): boolean {
+  if (epoch !== instanceGeneration(client) || generations.get(client)?.awaitingSnapshot)
+    return false;
   let changed = false;
-  client.setQueryData<InstanceStatus[]>(instanceKey, previous => {
+  client.setQueryData<InstanceStatus[]>(instanceKey, (previous) => {
     if (!previous) return previous;
-    const old = previous.find(status => status.id === incoming.id);
+    const old = previous.find((status) => status.id === incoming.id);
     if (old && old.revision > incoming.revision) return previous;
-    changed = !old || old.state !== incoming.state || old.currentTask !== incoming.currentTask ||
-      old.taskSuccesses !== incoming.taskSuccesses || old.taskFailures !== incoming.taskFailures;
-    return old ? previous.map(status => status.id === incoming.id ? incoming : status) : [...previous, incoming];
+    changed =
+      !old ||
+      old.state !== incoming.state ||
+      old.currentTask !== incoming.currentTask ||
+      old.taskSuccesses !== incoming.taskSuccesses ||
+      old.taskFailures !== incoming.taskFailures;
+    return old
+      ? previous.map((status) => (status.id === incoming.id ? incoming : status))
+      : [...previous, incoming];
   });
   if (changed) void client.invalidateQueries({ queryKey: taskKey(incoming.id) });
   return true;

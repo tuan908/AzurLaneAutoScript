@@ -1,7 +1,7 @@
 {
   "name": "alas-dashboard",
-  "private": true,
   "version": "0.1.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,11 @@
     "gen:api": "openapi-typescript openapi.json --output src/api/generated.ts",
     "test": "vitest run",
     "lint": "oxlint src",
-    "test:e2e": "playwright test e2e"
+    "test:e2e": "playwright test e2e",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "fmt": "oxfmt",
+    "check": "oxlint src && oxfmt --check && bun run typecheck"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.5",
@@ -35,6 +39,7 @@
     "@vitejs/plugin-react": "6",
     "babel-plugin-react-compiler": "^1.0.0",
     "openapi-typescript": "7.10.1",
+    "oxfmt": "^0.80.0",
     "oxlint": "^1.95.0",
     "typescript": "5.9.3",
     "typescript-check": "npm:typescript@7.0.2",

@@ -1,13 +1,18 @@
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
-import { api } from "../../api/client";
-import { createDashboardSync } from "./dashboard-sync";
-import { startEventStream } from "./event-stream";
+
+import { api } from "@/api/client";
+
 import { deferred, instanceFixture } from "../instances/test-fixtures";
 import { logStore } from "../logs/log-store";
+import { createDashboardSync } from "./dashboard-sync";
+import { startEventStream } from "./event-stream";
 
 const resync = { event: "resync", data: '{"streamId":"server"}' };
-const backlog = (seq: number) => ({ lines: [{ seq, text: `line ${seq}` }], lastSeq: seq });
+const backlog = (seq: number) => ({
+  lines: [{ seq, text: `line ${seq}` }],
+  lastSeq: seq,
+});
 
 afterEach(() => {
   logStore.clear();
@@ -25,12 +30,18 @@ it("recovers missed logs on a new connection before reporting Live", async () =>
   };
   const client = new QueryClient();
   let synchronize = createDashboardSync(client, onReady, () => {});
-  const open = vi.fn(async () => new Response(`event: resync\ndata: ${resync.data}\n\n`, {
-    headers: { "Content-Type": "text/event-stream" },
-  }));
+  const open = vi.fn(
+    async () =>
+      new Response(`event: resync\ndata: ${resync.data}\n\n`, {
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+  );
   const stop = startEventStream({
-    open, retryMs: 1,
-    onConnecting: () => { synchronize = createDashboardSync(client, onReady, () => {}); },
+    open,
+    retryMs: 1,
+    onConnecting: () => {
+      synchronize = createDashboardSync(client, onReady, () => {});
+    },
     onFrame: (frame, signal) => synchronize(frame, signal),
     onFailure: () => {},
   });
@@ -44,8 +55,14 @@ it("recovers missed logs on a new connection before reporting Live", async () =>
 });
 
 it("does not publish a partial backlog and can recover on retry", async () => {
-  vi.spyOn(api, "instances").mockResolvedValue([instanceFixture(), instanceFixture({ id: "other" })]);
-  const logs = vi.spyOn(api, "logs").mockResolvedValueOnce(backlog(1)).mockRejectedValueOnce(new Error("backlog failed"));
+  vi.spyOn(api, "instances").mockResolvedValue([
+    instanceFixture(),
+    instanceFixture({ id: "other" }),
+  ]);
+  const logs = vi
+    .spyOn(api, "logs")
+    .mockResolvedValueOnce(backlog(1))
+    .mockRejectedValueOnce(new Error("backlog failed"));
   const ready = vi.fn();
   const sync = createDashboardSync(new QueryClient(), ready, () => {});
   const signal = new AbortController().signal;

@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
-import type { LogLine } from "../../api/client";
+
+import type { LogLine } from "@/api/client";
 
 /** Lines kept per instance. Virtualization alone would not bound the array, this does. */
 export const LOG_LIMIT = 2000;
@@ -55,7 +56,10 @@ export class LogStore {
     const keep = new Set(ids);
     let changed = false;
     for (const id of this.lines.keys()) {
-      if (!keep.has(id)) { this.lines.delete(id); changed = true; }
+      if (!keep.has(id)) {
+        this.lines.delete(id);
+        changed = true;
+      }
     }
     if (changed) this.emit();
   }

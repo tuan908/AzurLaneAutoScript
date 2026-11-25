@@ -3,23 +3,32 @@ import { expect, test } from "@playwright/test";
 const base = process.env["ALAS_E2E_BASE"];
 if (!base) throw new Error("Set ALAS_E2E_BASE to an isolated server with a fake worker");
 
-test("distinguishes pending, unavailable, empty, and stale dashboard data", async ({ page, request }) => {
+test("distinguishes pending, unavailable, empty, and stale dashboard data", async ({
+  page,
+  request,
+}) => {
   const { instances } = await (await request.get(`${base}/api/v1/instances`)).json();
   const profile = `${base}/dashboard/#/${encodeURIComponent(instances[0].id)}`;
   let releaseTasks = () => {};
-  const firstRequest = new Promise<void>((resolve) => { releaseTasks = resolve; });
+  const firstRequest = new Promise<void>((resolve) => {
+    releaseTasks = resolve;
+  });
   let taskResponse: "error" | "empty" | "ready" = "error";
   await page.emulateMedia({ colorScheme: "light" });
   await page.clock.install();
   await page.route("**/api/v1/instances/*/tasks", async (route) => {
     await firstRequest;
-    await route.fulfill(taskResponse === "error" ? { status: 503 } : {
-      json: {
-        running: [],
-        pending: taskResponse === "ready" ? [{ command: "Commission", nextRun: null }] : [],
-        waiting: [],
-      },
-    });
+    await route.fulfill(
+      taskResponse === "error"
+        ? { status: 503 }
+        : {
+            json: {
+              running: [],
+              pending: taskResponse === "ready" ? [{ command: "Commission", nextRun: null }] : [],
+              waiting: [],
+            },
+          },
+    );
   });
 
   await page.goto(`${profile}/scheduler`);
@@ -38,16 +47,27 @@ test("distinguishes pending, unavailable, empty, and stale dashboard data", asyn
   await expect(page.getByText("Commission", { exact: true })).toBeVisible();
   taskResponse = "error";
   await page.clock.fastForward(11_000);
-  await expect(page.getByText("Showing stale task queue. The latest request failed.")).toBeVisible();
+  await expect(
+    page.getByText("Showing stale task queue. The latest request failed."),
+  ).toBeVisible();
   await expect(page.getByText("Commission", { exact: true })).toBeVisible();
   await page.getByText("Dark", { exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect(page.getByText("Showing stale task queue. The latest request failed.")).toBeVisible();
+  await expect(
+    page.getByText("Showing stale task queue. The latest request failed."),
+  ).toBeVisible();
 
   let historyUnavailable = true;
-  await page.route("**/api/v1/recovery", (route) => historyUnavailable
-    ? route.fulfill({ status: 503 })
-    : route.fulfill({ json: { history: [], policy: { maxRestartsPerHour: 3, backoffSeconds: [15], instances: {} } } }));
+  await page.route("**/api/v1/recovery", (route) =>
+    historyUnavailable
+      ? route.fulfill({ status: 503 })
+      : route.fulfill({
+          json: {
+            history: [],
+            policy: { maxRestartsPerHour: 3, backoffSeconds: [15], instances: {} },
+          },
+        }),
+  );
   await page.goto(`${profile}/health`);
   await expect(page.getByText("Could not load recovery history.")).toBeVisible();
   await expect(page.getByText("No recovery actions for this instance.")).toHaveCount(0);
@@ -56,7 +76,10 @@ test("distinguishes pending, unavailable, empty, and stale dashboard data", asyn
   await expect(page.getByText("No recovery actions for this instance.")).toBeVisible();
 });
 
-test("opens nested views, restores route search, and shows invalid routes", async ({ page, request }) => {
+test("opens nested views, restores route search, and shows invalid routes", async ({
+  page,
+  request,
+}) => {
   const response = await request.get(`${base}/api/v1/instances`);
   expect(response.ok()).toBe(true);
   const { instances } = await response.json();
@@ -67,7 +90,10 @@ test("opens nested views, restores route search, and shows invalid routes", asyn
 
   await page.goto(root);
   await expect(page).toHaveURL(`${profile}/overview`);
-  await expect(links.getByRole("link", { name: "Overview" })).toHaveAttribute("aria-current", "page");
+  await expect(links.getByRole("link", { name: "Overview" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
 
   await page.goto(`${profile}/logs?filter=Scheduler&level=warn`);
   const filter = page.getByRole("textbox", { name: "Filter logs" });
@@ -82,7 +108,9 @@ test("opens nested views, restores route search, and shows invalid routes", asyn
   await expect(filter).toHaveValue("Commission");
 
   await page.goto(`${profile}/settings?q=Alas.Emulator.Serial`);
-  await expect(page.getByRole("textbox", { name: "Search settings" })).toHaveValue("Alas.Emulator.Serial");
+  await expect(page.getByRole("textbox", { name: "Search settings" })).toHaveValue(
+    "Alas.Emulator.Serial",
+  );
   await expect(page.getByRole("textbox", { name: /Alas\.Emulator\.Serial$/ })).toBeVisible();
 
   await page.goto(`${profile}/unknown`);
@@ -92,7 +120,10 @@ test("opens nested views, restores route search, and shows invalid routes", asyn
   await expect(page.getByRole("heading", { name: "Instance not found" })).toBeVisible();
 });
 
-test("edits a profile and reconnects to the same worker after closing the tab", async ({ browser, request }) => {
+test("edits a profile and reconnects to the same worker after closing the tab", async ({
+  browser,
+  request,
+}) => {
   const name = `smoke-${Date.now()}`;
   const other = `${name}-other`;
   const otherProfile = await request.post(`${base}/api/v1/instances`, { data: { id: other } });
@@ -111,7 +142,9 @@ test("edits a profile and reconnects to the same worker after closing the tab", 
 
     const editSerial = () => page.getByRole("textbox", { name: /Alas\.Emulator\.Serial$/ });
     const configUrl = `${base}/api/v1/instances/${name}/config`;
-    const saveGate = new Promise<void>((resolve) => { releaseSave = resolve; });
+    const saveGate = new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
     await page.route(configUrl, async (route) => {
       if (route.request().method() === "PATCH") await saveGate;
       await route.continue();
@@ -121,7 +154,9 @@ test("edits a profile and reconnects to the same worker after closing the tab", 
     await page.getByRole("button", { name: "Save (1)" }).click();
     await expect(editSerial()).toBeDisabled();
     await page.getByLabel("Search settings").fill("Alas.Emulator.ScreenshotMethod");
-    await expect(page.getByRole("combobox", { name: /Alas\.Emulator\.ScreenshotMethod$/ })).toBeDisabled();
+    await expect(
+      page.getByRole("combobox", { name: /Alas\.Emulator\.ScreenshotMethod$/ }),
+    ).toBeDisabled();
     releaseSave();
     await expect(page.getByText("Saved 1 setting(s)")).toBeVisible();
 
@@ -136,7 +171,9 @@ test("edits a profile and reconnects to the same worker after closing the tab", 
     });
     expect(outsideEdit.ok()).toBe(true);
     await Promise.all([
-      page.waitForResponse((response) => response.request().method() === "GET" && response.url() === configUrl),
+      page.waitForResponse(
+        (response) => response.request().method() === "GET" && response.url() === configUrl,
+      ),
       page.evaluate(() => window.dispatchEvent(new Event("visibilitychange"))),
     ]);
     await expect(page.getByRole("button", { name: "Save (1)" })).toBeDisabled();
@@ -144,7 +181,9 @@ test("edits a profile and reconnects to the same worker after closing the tab", 
     await page.getByRole("button", { name: "Reload, discard my edits" }).click();
     await expect(editSerial()).toHaveValue("127.0.0.1:20001");
     const start = page.getByRole("button", { name: "Start", exact: true });
-    const startGate = new Promise<void>((resolve) => { releaseStart = resolve; });
+    const startGate = new Promise<void>((resolve) => {
+      releaseStart = resolve;
+    });
     await page.route(`${base}/api/v1/instances/${name}/start`, async (route) => {
       await startGate;
       await route.continue();
@@ -158,7 +197,9 @@ test("edits a profile and reconnects to the same worker after closing the tab", 
     started = true;
     releaseStart();
     await page.getByRole("link", { name: "Logs", exact: true }).click();
-    await expect(page.getByRole("region", { name: "Recent log lines" })).toContainText("Smoke worker ready");
+    await expect(page.getByRole("region", { name: "Recent log lines" })).toContainText(
+      "Smoke worker ready",
+    );
     const statusUrl = `${base}/api/v1/instances/${name}`;
     const before = await (await request.get(statusUrl)).json();
     expect(before.processId).toBeGreaterThan(0);
@@ -166,13 +207,17 @@ test("edits a profile and reconnects to the same worker after closing the tab", 
 
     const reopened = await browser.newPage();
     await reopened.goto(`${base}/dashboard/#/${name}/logs`);
-    await expect(reopened.getByRole("region", { name: "Recent log lines" })).toContainText("Smoke worker ready");
+    await expect(reopened.getByRole("region", { name: "Recent log lines" })).toContainText(
+      "Smoke worker ready",
+    );
     const after = await (await request.get(statusUrl)).json();
     expect(after.processId).toBe(before.processId);
     const details = await (await request.get(`${base}/api/v1/health/details`)).json();
     expect(details.metrics.taskSuccesses).toBeGreaterThan(0);
     await reopened.getByRole("button", { name: "Stop", exact: true }).click();
-    await expect.poll(async () => (await (await request.get(statusUrl)).json()).processId).toBeNull();
+    await expect
+      .poll(async () => (await (await request.get(statusUrl)).json()).processId)
+      .toBeNull();
     started = false;
     await reopened.close();
   } finally {

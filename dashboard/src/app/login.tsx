@@ -1,5 +1,6 @@
 import { Input } from "@ui-sdk/react/input";
 import { useState } from "react";
+
 import { setToken } from "../api/client";
 import { Button } from "../shared/ui/button";
 import { Brand } from "./brand";
@@ -19,11 +20,25 @@ export function Login({ onDone }: { onDone: () => void }) {
         <Brand />
         <div>
           <h2>Password required</h2>
-          <p className="text-subtle text-xs">This server is protected. The password is kept for this browser tab only.</p>
+          <p className="text-subtle text-xs">
+            This server is protected. The password is kept for this browser tab only.
+          </p>
         </div>
-        <label className="sr-only" htmlFor="password">Password</label>
-        <Input id="password" type="password" data-agent-secret required placeholder="Password" value={value} onValueChange={setValue} />
-        <Button variant="primary" type="submit">Unlock</Button>
+        <label className="sr-only" htmlFor="password">
+          Password
+        </label>
+        <Input
+          id="password"
+          type="password"
+          data-agent-secret
+          required
+          placeholder="Password"
+          value={value}
+          onValueChange={setValue}
+        />
+        <Button variant="primary" type="submit">
+          Unlock
+        </Button>
       </form>
     </div>
   );

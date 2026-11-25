@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { ApiError, api, type ConfigField, type ConfigValue } from "../../api/client";
-import { changeDraft, draftValue, type Draft } from "./config-draft";
+
+import { ApiError, api, type ConfigField, type ConfigValue } from "@/api/client";
+
 import { tasksQuery } from "../scheduler/queries";
+import { changeDraft, draftValue, type Draft } from "./config-draft";
 import { configQuery } from "./queries";
 
 export function useConfigEditor(id: string) {
@@ -15,7 +17,8 @@ export function useConfigEditor(id: string) {
   const [refreshing, setRefreshing] = useState(false);
   const lock = useRef(false);
   const save = useMutation({
-    mutationFn: (submitted: Draft) => api.updateConfig(id, submitted.baseline.revision, submitted.edits),
+    mutationFn: (submitted: Draft) =>
+      api.updateConfig(id, submitted.baseline.revision, submitted.edits),
     onSuccess: async (result) => {
       // Do not let a new draft begin against the previous revision.
       await Promise.all([
@@ -29,25 +32,48 @@ export function useConfigEditor(id: string) {
     },
     onError: (error) => {
       if (error instanceof ApiError && error.status === 409) setConflict(true);
-      if (error instanceof ApiError && error.status === 400 && error.body["fields"] && typeof error.body["fields"] === "object") {
-        setErrors(Object.fromEntries(Object.entries(error.body["fields"]).filter((entry): entry is [string, string] => typeof entry[1] === "string")));
+      if (
+        error instanceof ApiError &&
+        error.status === 400 &&
+        error.body["fields"] &&
+        typeof error.body["fields"] === "object"
+      ) {
+        setErrors(
+          Object.fromEntries(
+            Object.entries(error.body["fields"]).filter(
+              (entry): entry is [string, string] => typeof entry[1] === "string",
+            ),
+          ),
+        );
       }
     },
-    onSettled: () => { lock.current = false; },
+    onSettled: () => {
+      lock.current = false;
+    },
   });
   const stale = !!draft && !!doc.data && draft.baseline.revision !== doc.data.revision;
   const busy = save.isPending || refreshing;
   const blocked = busy || doc.isError || conflict || stale;
   return {
-    doc, edits: draft?.edits ?? {}, errors, notice, conflict: conflict || stale, busy, blocked,
+    doc,
+    edits: draft?.edits ?? {},
+    errors,
+    notice,
+    conflict: conflict || stale,
+    busy,
+    blocked,
     error: save.error,
     valueOf: (field: ConfigField) => draftValue(draft, doc.data, field.path),
     change(field: ConfigField, value: ConfigValue) {
       if (lock.current || blocked || !doc.data || field.readOnly) return;
       const document = doc.data;
-      setDraft(previous => changeDraft(previous, document, field, value));
+      setDraft((previous) => changeDraft(previous, document, field, value));
       setNotice(null);
-      setErrors(previous => { const next = { ...previous }; delete next[field.path]; return next; });
+      setErrors((previous) => {
+        const next = { ...previous };
+        delete next[field.path];
+        return next;
+      });
       save.reset();
     },
     submit() {
@@ -71,8 +97,15 @@ export function useConfigEditor(id: string) {
       try {
         const result = await doc.refetch();
         if (!result.isSuccess) return;
-        setDraft(null); setErrors({}); setConflict(false); setNotice(null); save.reset();
-      } finally { lock.current = false; setRefreshing(false); }
+        setDraft(null);
+        setErrors({});
+        setConflict(false);
+        setNotice(null);
+        save.reset();
+      } finally {
+        lock.current = false;
+        setRefreshing(false);
+      }
     },
   };
 }

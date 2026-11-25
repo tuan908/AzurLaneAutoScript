@@ -140,13 +140,32 @@
 }
 
 @layer base {
-  html, body, #root { height: 100%; }
-  body { @apply bg-canvas text-ink font-sans text-sm leading-[1.45] antialiased; }
-  h1, h2, h3, h4 { @apply font-semibold leading-tight; }
-  h2 { @apply text-xl tracking-tight; }
-  h3 { @apply text-sm; }
-  :focus-visible { @apply outline-2 outline-offset-2 outline-accent; }
-  button:not(:disabled) { @apply cursor-pointer; }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-canvas text-ink font-sans text-sm leading-[1.45] antialiased;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-semibold leading-tight;
+  }
+  h2 {
+    @apply text-xl tracking-tight;
+  }
+  h3 {
+    @apply text-sm;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+  button:not(:disabled) {
+    @apply cursor-pointer;
+  }
 }
 
 /* SDK components share the dashboard's theme tokens. */
@@ -168,10 +187,12 @@
 }
 
 /* Native and SDK text controls share sizing; exclude hidden form controls. */
-:where(input:not([type=checkbox],[type=radio],[type=hidden]), textarea, select) {
+:where(input:not([type="checkbox"], [type="radio"], [type="hidden"]), textarea, select) {
   @apply w-full min-h-8.5 rounded-alas-sm border border-edge-strong bg-panel px-2.5 py-1.5 text-ink;
 }
-:where(input:not([type=checkbox],[type=radio],[type=hidden]), textarea, select):focus {
+:where(input:not([type="checkbox"], [type="radio"], [type="hidden"]), textarea, select):focus {
   @apply border-accent outline-none ring-2 ring-accent-soft;
 }
-textarea { @apply resize-y font-code text-[12.5px]; }
+textarea {
+  @apply resize-y font-code text-[12.5px];
+}

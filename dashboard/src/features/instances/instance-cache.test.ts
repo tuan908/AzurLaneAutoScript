@@ -1,7 +1,15 @@
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, type InstanceStatus } from "../../api/client";
-import { applyInstanceUpdate, beginInstanceGeneration, instanceGeneration, instanceKey, instanceOptions } from "./instance-cache";
+
+import { api, type InstanceStatus } from "@/api/client";
+
+import {
+  applyInstanceUpdate,
+  beginInstanceGeneration,
+  instanceGeneration,
+  instanceKey,
+  instanceOptions,
+} from "./instance-cache";
 import { deferred, instanceFixture } from "./test-fixtures";
 
 afterEach(() => vi.restoreAllMocks());

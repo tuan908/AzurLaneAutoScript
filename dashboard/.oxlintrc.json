@@ -1,19 +1,10 @@
 {
-  "plugins": [
-    "react",
-    "jsx-a11y",
-    "typescript",
-    "unicorn",
-    "oxc"
-  ],
+  "plugins": ["react", "jsx-a11y", "typescript", "unicorn", "oxc"],
   "categories": {
     "correctness": "error",
     "suspicious": "error"
   },
-  "ignorePatterns": [
-    "src/api.generated.ts",
-    "dist/**"
-  ],
+  "ignorePatterns": ["src/api/generated.ts", "dist/**", "node_modules/**"],
   "rules": {
     "react/react-in-jsx-scope": "off",
     "react/incompatible-library": "warn",

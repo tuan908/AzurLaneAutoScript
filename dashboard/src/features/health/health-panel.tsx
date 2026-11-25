@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNow } from "../../shared/use-now";
-import { Metric } from "../../shared/ui/metric";
+
+import { Metric } from "@/shared/ui/metric";
+import { useNow } from "@/shared/use-now";
+
 import { useWorkspaceStatus } from "../instances/workspace";
 import { recoveryQuery } from "./queries";
 import { RecoveryControls } from "./recovery-controls";
@@ -36,10 +38,24 @@ export function HealthPanel() {
   return (
     <>
       <dl className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(150px,1fr))] max-[600px]:grid-cols-2">
-        <Metric label="Health">{h ? HEALTH_LABEL[h.state] ?? h.state : "—"}</Metric>
-        <Metric label="Restarts last hour">{rec ? rec.restartsLastHour : "—"}{global ? <small> / {global.maxRestartsPerHour}</small> : null}</Metric>
-        <Metric label="Next recovery">{rec?.gaveUp ? <span className="text-bad">Gave up</span>
-          : rec?.nextAttemptAt ? <><RecoveryCountdown at={rec.nextAttemptAt} /> <small>{rec.pendingReason}</small></> : rec ? "None" : "—"}</Metric>
+        <Metric label="Health">{h ? (HEALTH_LABEL[h.state] ?? h.state) : "—"}</Metric>
+        <Metric label="Restarts last hour">
+          {rec ? rec.restartsLastHour : "—"}
+          {global ? <small> / {global.maxRestartsPerHour}</small> : null}
+        </Metric>
+        <Metric label="Next recovery">
+          {rec?.gaveUp ? (
+            <span className="text-bad">Gave up</span>
+          ) : rec?.nextAttemptAt ? (
+            <>
+              <RecoveryCountdown at={rec.nextAttemptAt} /> <small>{rec.pendingReason}</small>
+            </>
+          ) : rec ? (
+            "None"
+          ) : (
+            "—"
+          )}
+        </Metric>
       </dl>
       {h?.detail && <p className="text-subtle text-xs">{h.detail}</p>}
 

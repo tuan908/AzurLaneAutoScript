@@ -8,9 +8,11 @@ import {
   Outlet,
   stripSearchParams,
 } from "@tanstack/react-router";
+
+import { useInstances } from "@/features/instances/queries";
+import { Workspace } from "@/features/instances/workspace";
+
 import { App } from "./app";
-import { Workspace } from "../features/instances/workspace";
-import { useInstances } from "../features/instances/queries";
 
 function RouteNotFound() {
   return (
@@ -21,7 +23,10 @@ function RouteNotFound() {
   );
 }
 
-const root = createRootRoute({ component: App, notFoundComponent: RouteNotFound });
+const root = createRootRoute({
+  component: App,
+  notFoundComponent: RouteNotFound,
+});
 
 const index = createRoute({
   getParentRoute: () => root,
@@ -29,7 +34,9 @@ const index = createRoute({
   component: function DashboardIndex() {
     const { data } = useInstances();
     const first = data?.[0];
-    return first ? <Navigate to="/$instanceId/overview" params={{ instanceId: first.id }} replace /> : (
+    return first ? (
+      <Navigate to="/$instanceId/overview" params={{ instanceId: first.id }} replace />
+    ) : (
       <main className="grid min-h-[50vh] place-content-center gap-2 text-center text-subtle">
         <h2>No instances yet</h2>
         <span>Create a profile from the sidebar to get started.</span>
@@ -53,7 +60,11 @@ const instance = createRoute({
         </main>
       );
     }
-    return <Workspace key={instanceId} status={status}><Outlet /></Workspace>;
+    return (
+      <Workspace key={instanceId} status={status}>
+        <Outlet />
+      </Workspace>
+    );
   },
 });
 
@@ -70,30 +81,38 @@ const overview = createRoute({
   getParentRoute: () => instance,
   path: "overview",
   staticData: { dashboardTab: "overview" },
-}).lazy(() => import("../features/overview/overview").then(({ Overview }) =>
-  createLazyRoute("/$instanceId/overview")({ component: Overview }),
-));
+}).lazy(() =>
+  import("../features/overview/overview").then(({ Overview }) =>
+    createLazyRoute("/$instanceId/overview")({ component: Overview }),
+  ),
+);
 
 const scheduler = createRoute({
   getParentRoute: () => instance,
   path: "scheduler",
   staticData: { dashboardTab: "scheduler" },
-}).lazy(() => import("../features/scheduler/scheduler").then(({ Scheduler }) =>
-  createLazyRoute("/$instanceId/scheduler")({ component: Scheduler }),
-));
+}).lazy(() =>
+  import("../features/scheduler/scheduler").then(({ Scheduler }) =>
+    createLazyRoute("/$instanceId/scheduler")({ component: Scheduler }),
+  ),
+);
 
 const logs = createRoute({
   getParentRoute: () => instance,
   path: "logs",
   staticData: { dashboardTab: "logs" },
-  validateSearch: (search: Record<string, unknown>): { filter: string; level: "all" | "warn" | "error" } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { filter: string; level: "all" | "warn" | "error" } => ({
     filter: typeof search["filter"] === "string" ? search["filter"] : "",
     level: search["level"] === "warn" || search["level"] === "error" ? search["level"] : "all",
   }),
   search: { middlewares: [stripSearchParams({ filter: "", level: "all" })] },
-}).lazy(() => import("../features/logs/logs").then(({ Logs }) =>
-  createLazyRoute("/$instanceId/logs")({ component: Logs }),
-));
+}).lazy(() =>
+  import("../features/logs/logs").then(({ Logs }) =>
+    createLazyRoute("/$instanceId/logs")({ component: Logs }),
+  ),
+);
 
 const settings = createRoute({
   getParentRoute: () => instance,
@@ -104,27 +123,40 @@ const settings = createRoute({
     task: typeof search["task"] === "string" ? search["task"] : "",
   }),
   search: { middlewares: [stripSearchParams({ q: "", task: "" })] },
-}).lazy(() => import("../features/settings/settings").then(({ Settings }) =>
-  createLazyRoute("/$instanceId/settings")({ component: Settings }),
-));
+}).lazy(() =>
+  import("../features/settings/settings").then(({ Settings }) =>
+    createLazyRoute("/$instanceId/settings")({ component: Settings }),
+  ),
+);
 
 const health = createRoute({
   getParentRoute: () => instance,
   path: "health",
   staticData: { dashboardTab: "health" },
-}).lazy(() => import("../features/health/health-panel").then(({ HealthPanel }) =>
-  createLazyRoute("/$instanceId/health")({ component: HealthPanel }),
-));
+}).lazy(() =>
+  import("../features/health/health-panel").then(({ HealthPanel }) =>
+    createLazyRoute("/$instanceId/health")({ component: HealthPanel }),
+  ),
+);
 
-const routeTree = root.addChildren([index, instance.addChildren([instanceIndex, overview, scheduler, logs, settings, health])]);
+const routeTree = root.addChildren([
+  index,
+  instance.addChildren([instanceIndex, overview, scheduler, logs, settings, health]),
+]);
 export const router = createRouter({
   routeTree,
   history: createHashHistory(),
   defaultPreload: "intent",
   notFoundMode: "root",
-  defaultPendingComponent: () => <div role="status" className="p-4 text-subtle">Loading view…</div>,
+  defaultPendingComponent: () => (
+    <div role="status" className="p-4 text-subtle">
+      Loading view…
+    </div>
+  ),
 });
 
 declare module "@tanstack/react-router" {
-  interface Register { router: typeof router }
+  interface Register {
+    router: typeof router;
+  }
 }

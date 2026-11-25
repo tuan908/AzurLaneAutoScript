@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import type { ConfigField, ConfigTask } from "../../api/client";
-import { Card } from "../../shared/ui/card";
-import { QueryNotice } from "../../shared/ui/query-content";
-import { SectionLabel } from "../../shared/ui/section-label";
+
+import type { ConfigField, ConfigTask } from "@/api/client";
+import { Card } from "@/shared/ui/card";
+import { QueryNotice } from "@/shared/ui/query-content";
+import { SectionLabel } from "@/shared/ui/section-label";
+
 import { readLang, saveLang } from "./lang";
 import { configSchemaQuery } from "./queries";
 import { SaveBar } from "./save-bar";
@@ -23,7 +25,8 @@ function searchFields(tasks: ConfigTask[], query: string) {
   for (const task of tasks)
     for (const group of task.groups)
       for (const field of group.fields)
-        if (field.label.toLowerCase().includes(q) || field.path.toLowerCase().includes(q)) hits.push({ task, field });
+        if (field.label.toLowerCase().includes(q) || field.path.toLowerCase().includes(q))
+          hits.push({ task, field });
   return hits.slice(0, MAX_SEARCH_HITS);
 }
 
@@ -40,10 +43,12 @@ export function Settings() {
   const current = tasks.find((t) => t.id === taskId) ?? tasks[0];
   const searchHits = useMemo(() => searchFields(tasks, search), [search, tasks]);
 
-  const notices = <>
-    <QueryNotice query={schema} label="settings schema" />
-    <QueryNotice query={doc} label="configuration" />
-  </>;
+  const notices = (
+    <>
+      <QueryNotice query={schema} label="settings schema" />
+      <QueryNotice query={doc} label="configuration" />
+    </>
+  );
   if (!schema.data || !doc.data) return notices;
 
   const renderField = (field: ConfigField) => (
@@ -68,19 +73,39 @@ export function Settings() {
           currentTaskId={current?.id}
           searching={searchHits !== null}
           search={search}
-          onSearch={(next) => void navigate({ search: (previous) => ({ ...previous, q: next }), replace: true })}
+          onSearch={(next) =>
+            void navigate({
+              search: (previous) => ({ ...previous, q: next }),
+              replace: true,
+            })
+          }
           lang={lang}
-          onLang={(next) => { setLang(next); saveLang(next); }}
+          onLang={(next) => {
+            setLang(next);
+            saveLang(next);
+          }}
           onTask={(next) => void navigate({ search: { q: "", task: next } })}
         />
 
         <section className="flex min-w-0 flex-col gap-4 pb-18">
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-            <h2 className="text-lg">{searchHits ? `${searchHits.length} matching setting${searchHits.length === 1 ? "" : "s"}` : current?.name}</h2>
-            {!searchHits && current && <span className="text-xs text-subtle">
-              {fieldCount} settings in {current.groups.length} group{current.groups.length === 1 ? "" : "s"}
-            </span>}
-            <span className="ml-auto font-code text-[11px] text-subtle" title="Config file revision">rev {doc.data.revision}</span>
+            <h2 className="text-lg">
+              {searchHits
+                ? `${searchHits.length} matching setting${searchHits.length === 1 ? "" : "s"}`
+                : current?.name}
+            </h2>
+            {!searchHits && current && (
+              <span className="text-xs text-subtle">
+                {fieldCount} settings in {current.groups.length} group
+                {current.groups.length === 1 ? "" : "s"}
+              </span>
+            )}
+            <span
+              className="ml-auto font-code text-[11px] text-subtle"
+              title="Config file revision"
+            >
+              rev {doc.data.revision}
+            </span>
           </div>
           {!searchHits && current?.help && <SettingHelp text={current.help} about={current.name} />}
 
@@ -88,10 +113,18 @@ export function Settings() {
 
           {searchHits ? (
             <Card className="[&_h3]:mb-0.5">
-              {searchHits.length === 0 && <div className="py-4.5 text-center text-[13px] text-subtle">No setting matches.</div>}
+              {searchHits.length === 0 && (
+                <div className="py-4.5 text-center text-[13px] text-subtle">
+                  No setting matches.
+                </div>
+              )}
               {searchHits.map(({ task, field }, i) => (
                 <div key={field.path}>
-                  {searchHits[i - 1]?.task.id !== task.id && <div className="mt-3.5 first:mt-0"><SectionLabel>{task.name}</SectionLabel></div>}
+                  {searchHits[i - 1]?.task.id !== task.id && (
+                    <div className="mt-3.5 first:mt-0">
+                      <SectionLabel>{task.name}</SectionLabel>
+                    </div>
+                  )}
                   {renderField(field)}
                 </div>
               ))}
@@ -100,7 +133,9 @@ export function Settings() {
             current?.groups.map((group) => (
               <Card key={group.id} className="[&_h3]:mb-0.5">
                 <h3>{group.name}</h3>
-                {group.help && <SettingHelp className="mb-1.5" text={group.help} about={group.name} />}
+                {group.help && (
+                  <SettingHelp className="mb-1.5" text={group.help} about={group.name} />
+                )}
                 {group.fields.map(renderField)}
               </Card>
             ))

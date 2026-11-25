@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
+
 import { changeDraft, draftValue } from "./config-draft";
 const field = { path: "x", type: "input" } as const;
 describe("config draft", () => {
   it("keeps a frozen baseline across server refreshes", () => {
     const first = changeDraft(null, { revision: "1", config: { x: "a", y: 1 } }, field, "b");
-    const second = changeDraft(first, { revision: "2", config: { x: "c", y: 2 } }, { ...field, path: "y" }, 3);
+    const second = changeDraft(
+      first,
+      { revision: "2", config: { x: "c", y: 2 } },
+      { ...field, path: "y" },
+      3,
+    );
     expect(second?.baseline.revision).toBe("1");
     expect(second?.edits).toEqual({ x: "b", y: 3 });
     expect(draftValue(first, { revision: "2", config: { y: 2 } }, "y")).toBe(1);

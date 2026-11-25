@@ -1,4 +1,4 @@
-import type { LogLine } from "../../api/client";
+import type { LogLine } from "@/api/client";
 
 export interface Completion {
   seq: number;
@@ -15,7 +15,12 @@ export function parseCompletion(line: LogLine): Completion | null {
   const task = end?.[1];
   if (!end || !task) return null;
   const clock = CLOCK.exec(line.text.slice(0, end.index));
-  return { seq: line.seq, time: clock?.[1] ?? null, task, result: end[2]?.toLowerCase() ?? null };
+  return {
+    seq: line.seq,
+    time: clock?.[1] ?? null,
+    task,
+    result: end[2]?.toLowerCase() ?? null,
+  };
 }
 
 export function recentCompletions(lines: readonly LogLine[], limit = 30): Completion[] {

@@ -1,4 +1,4 @@
-import type { InstanceStatus } from "../../api/client";
+import type { InstanceStatus } from "@/api/client";
 
 export type Tone = "ok" | "warn" | "bad" | "idle";
 
@@ -41,7 +41,11 @@ export function healthTone(s: InstanceStatus): { tone: Tone; label: string } {
   if (h?.state === "stalled") return { tone: "warn", label: "Stalled" };
   if (s.state === "starting") return { tone: "warn", label: "Starting" };
   if (s.state === "stopping") return { tone: "warn", label: "Stopping" };
-  if (s.state === "running") return { tone: "ok", label: h?.state === "idle" || !s.currentTask ? "Idle" : "Running" };
+  if (s.state === "running")
+    return {
+      tone: "ok",
+      label: h?.state === "idle" || !s.currentTask ? "Idle" : "Running",
+    };
   return { tone: "idle", label: "Stopped" };
 }
 
