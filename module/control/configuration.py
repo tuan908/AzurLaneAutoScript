@@ -7,10 +7,11 @@ Saving follows the PyWebIO GUI's rules (the same type coercion, `validate` patte
 change is invalid, nothing is written. Unknown keys in the file are kept because the config is
 read, patched and written back as a whole.
 """
+import contextlib
 import datetime
 import hashlib
 import re
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, ContextManager, Dict, Iterable, List, Optional, Tuple
 
 from module.config.deep import deep_get, deep_set
 
@@ -95,6 +96,7 @@ class ConfigService:
             read_config: Callable[[str], dict],
             write_config: Callable[[str, dict], None],
             save_callback: Callable[[str, Any], Iterable[Tuple[str, Any]]] = lambda key, value: (),
+            lock: Callable[[str], ContextManager] = lambda name: contextlib.nullcontext(),
     ):
         """
         Args:
@@ -106,6 +108,8 @@ class ConfigService:
             read_config: Parsed and updated config (ConfigUpdater.read_file).
             write_config: Write the whole config atomically (ConfigUpdater.write_file).
             save_callback: Derived changes for a changed key (ConfigUpdater.save_callback).
+            lock: Lock of an instance's config file, shared with the worker and the GUI
+                (module.config.lock.config_lock); held from the revision check to the write.
         """
         self._config_mod = config_mod
         self._args = args
@@ -115,6 +119,7 @@ class ConfigService:
         self._read_config = read_config
         self._write_config = write_config
         self._save_callback = save_callback
+        self._lock = lock
 
     def _require_alas(self, instance_id: str) -> None:
         mod = self._config_mod(instance_id)
@@ -201,6 +206,10 @@ class ConfigService:
         self._require_alas(instance_id)
         if not isinstance(changes, dict) or not changes:
             raise ConfigInvalid({"": "No changes"})
+        with self._lock(instance_id):
+            return self._update_locked(instance_id, revision, changes)
+
+    def _update_locked(self, instance_id: str, revision: str, changes: Dict[str, Any]) -> dict:
         current = _revision(self._read_raw(instance_id))
         if revision != current:
             raise ConfigConflict(current)
@@ -231,7 +240,7 @@ class ConfigService:
             for derived_path, derived_value in self._save_callback(path, value):
                 deep_set(config, derived_path, derived_value)
                 applied[derived_path] = derived_value
-        # Last check before writing: the worker or the GUI may have saved meanwhile
+        # Writers that hold the same lock cannot have written meanwhile; this catches the rest
         if _revision(self._read_raw(instance_id)) != current:
             raise ConfigConflict(_revision(self._read_raw(instance_id)))
         self._write_config(instance_id, config)

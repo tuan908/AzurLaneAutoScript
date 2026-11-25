@@ -112,6 +112,8 @@ class ControlApi:
             return JSONResponse(body, status_code=400)
         if isinstance(e, ConfigUnsupported):
             return _error(501, "unsupported", str(e))
+        if type(e).__name__ == "ConfigLockTimeout":
+            return _error(503, "config_busy", "The config is being saved by Alas or the GUI; try again")
         if isinstance(e, ValueError):
             return _error(400, "bad_request", str(e))
         return None

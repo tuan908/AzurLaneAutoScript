@@ -29,3 +29,4 @@ idna==2.6
 urllib3==1.22
 certifi==2021.5.30
 aiofiles==0.7.0
+filelock==3.3.0

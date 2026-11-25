@@ -43,6 +43,7 @@ from pywebio.session import download, go_app, info, local, register_thread, run_
 import module.webui.lang as lang
 from module.config.config import AzurLaneConfig, Function
 from module.config.deep import deep_get, deep_iter, deep_set
+from module.config.lock import config_lock
 from module.config.env import IS_ON_PHONE_CLOUD
 from module.config.server import to_server
 from module.config.utils import (
@@ -535,51 +536,53 @@ class AlasGUI(Frame):
             config_updater: AzurLaneConfig = State.config_updater,
     ) -> None:
         try:
-            valid = []
-            invalid = []
-            config = config_updater.read_file(config_name)
-            n = datetime.now()
-            for p, v in deep_iter(config, depth=3):
-                if p[-1].endswith('un') and not isinstance(v, bool):
-                    if (v - n).days >= 31:
-                        deep_set(config, p, '')
-            for k, v in modified.copy().items():
-                valuetype = deep_get(self.ALAS_ARGS, k + ".valuetype")
-                v = parse_pin_value(v, valuetype)
-                validate = deep_get(self.ALAS_ARGS, k + ".validate")
-                if not len(str(v)):
-                    default = deep_get(self.ALAS_ARGS, k + ".value")
-                    modified[k] = default
-                    deep_set(config, k, default)
-                    valid.append(k)
-                    pin["_".join(k.split("."))] = default
+            # Same lock as the Alas worker and the control API, so no save is lost
+            with config_lock(config_name):
+                valid = []
+                invalid = []
+                config = config_updater.read_file(config_name)
+                n = datetime.now()
+                for p, v in deep_iter(config, depth=3):
+                    if p[-1].endswith('un') and not isinstance(v, bool):
+                        if (v - n).days >= 31:
+                            deep_set(config, p, '')
+                for k, v in modified.copy().items():
+                    valuetype = deep_get(self.ALAS_ARGS, k + ".valuetype")
+                    v = parse_pin_value(v, valuetype)
+                    validate = deep_get(self.ALAS_ARGS, k + ".validate")
+                    if not len(str(v)):
+                        default = deep_get(self.ALAS_ARGS, k + ".value")
+                        modified[k] = default
+                        deep_set(config, k, default)
+                        valid.append(k)
+                        pin["_".join(k.split("."))] = default
 
-                elif not validate or re_fullmatch(validate, v):
-                    deep_set(config, k, v)
-                    modified[k] = v
-                    valid.append(k)
-                    for set_key, set_value in config_updater.save_callback(k, v):
-                        modified[set_key] = set_value
-                        deep_set(config, set_key, set_value)
-                        valid.append(set_key)
-                        pin["_".join(set_key.split("."))] = to_pin_value(set_value)
-                else:
-                    modified.pop(k)
-                    invalid.append(k)
-                    logger.warning(f"Invalid value {v} for key {k}, skip saving.")
-            self.pin_remove_invalid_mark(valid)
-            self.pin_set_invalid_mark(invalid)
-            if modified:
-                toast(
-                    t("Gui.Toast.ConfigSaved"),
-                    duration=1,
-                    position="right",
-                    color="success",
-                )
-                logger.info(
-                    f"Save config {filepath_config(config_name)}, {dict_to_kv(modified)}"
-                )
-                config_updater.write_file(config_name, config)
+                    elif not validate or re_fullmatch(validate, v):
+                        deep_set(config, k, v)
+                        modified[k] = v
+                        valid.append(k)
+                        for set_key, set_value in config_updater.save_callback(k, v):
+                            modified[set_key] = set_value
+                            deep_set(config, set_key, set_value)
+                            valid.append(set_key)
+                            pin["_".join(set_key.split("."))] = to_pin_value(set_value)
+                    else:
+                        modified.pop(k)
+                        invalid.append(k)
+                        logger.warning(f"Invalid value {v} for key {k}, skip saving.")
+                self.pin_remove_invalid_mark(valid)
+                self.pin_set_invalid_mark(invalid)
+                if modified:
+                    toast(
+                        t("Gui.Toast.ConfigSaved"),
+                        duration=1,
+                        position="right",
+                        color="success",
+                    )
+                    logger.info(
+                        f"Save config {filepath_config(config_name)}, {dict_to_kv(modified)}"
+                    )
+                    config_updater.write_file(config_name, config)
         except Exception as e:
             logger.exception(e)
 
@@ -1577,6 +1580,7 @@ def app():
             read_config=State.config_updater.read_file,
             write_config=lambda name, data: State.config_updater.write_file(name, data),
             save_callback=State.config_updater.save_callback,
+            lock=lambda name: config_lock(name, timeout=10, required=True),
         ),
     ), dashboard_dir=os.path.abspath("./dashboard/dist"))
 
