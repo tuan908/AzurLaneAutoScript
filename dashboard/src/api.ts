@@ -12,6 +12,7 @@ export interface InstanceStatus {
   lastError: string | null;
   legacyState: number;
   revision: number;
+  runLogStartSeq: number;
   health?: InstanceHealth | null;
 }
 

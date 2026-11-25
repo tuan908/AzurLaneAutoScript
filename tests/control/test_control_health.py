@@ -82,6 +82,21 @@ def test_classification(env):
     assert "Research" in health(monitor, "stall")["detail"]
 
 
+def test_takeover_of_an_earlier_run_does_not_count(env):
+    clock, service, policy, monitor = env
+    policy.update({"instances": {"alas": {"autoRestart": True}}, "backoffSeconds": [0]})
+    service.set("alas", "failed")
+    service.log_lines["alas"] = ["CRITICAL │ Request human takeover", "INFO │ new run", "INFO │ killed"]
+    # Lines with seq > 0 belong to the current run (seq 0 is the earlier run's takeover)
+    service.statuses["alas"]["runLogStartSeq"] = 0
+    original = service.logs
+    service.logs = lambda iid, after=0, limit=500: {
+        "lines": [l for l in original(iid)["lines"] if l["seq"] > after], "lastSeq": 2}
+    monitor.tick()
+    assert service.calls == [("start", "alas")]
+    assert {e["reason"] for e in monitor.snapshot()["history"]} == {"crashed"}
+
+
 def test_no_recovery_unless_enabled(env):
     clock, service, policy, monitor = env
     service.set("alas", "failed")

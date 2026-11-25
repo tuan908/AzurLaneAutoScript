@@ -69,6 +69,8 @@ class ProcessManager:
         self._text_console = Console(no_color=True, width=200)
         self.log_tail = collections.deque(maxlen=LOG_TAIL_LINES)
         self.log_seq = 0
+        # log_seq when the current run started: lines after it belong to this run
+        self.run_log_start_seq = 0
 
     def start(self, func, ev: threading.Event = None) -> bool:
         """
@@ -93,6 +95,7 @@ class ProcessManager:
                         ev,
                     ),
                 )
+                self.run_log_start_seq = self.log_seq
                 self._process.start()
                 self._stop_requested = False
                 self._exit_observed = False
@@ -262,6 +265,7 @@ class ProcessManager:
             "lastError": last_error,
             "legacyState": legacy_state,
             "revision": self.revision,
+            "runLogStartSeq": self.run_log_start_seq,
         }
 
     @property

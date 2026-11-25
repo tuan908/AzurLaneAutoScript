@@ -219,7 +219,8 @@ class HealthMonitor:
         if state in ("starting", "stopping"):
             return {"state": "ok", "detail": state}
         if state == "failed":
-            tail = self.service.logs(status["id"], 0, 30)["lines"]
+            # Only this run's last lines: an earlier run may have asked for a human
+            tail = self.service.logs(status["id"], status.get("runLogStartSeq") or 0, 30)["lines"]
             if any(marker in line["text"] for line in tail for marker in HUMAN_TAKEOVER_MARKERS):
                 return {"state": "human_takeover", "detail": "Alas requested human takeover, see the log"}
             return {"state": "crashed", "detail": status.get("lastError") or "Worker exited with an error"}
