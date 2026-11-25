@@ -1,6 +1,6 @@
 # ALAS lifecycle ownership map (P1.1)
 
-Status: v2 (2026-11-25, review fixes). Slice P1.1 of `doc/modernization/PLAN.md`.
+Status: v3 (2026-11-25, second review fixes). Slice P1.1 of `doc/modernization/PLAN.md`.
 References were taken at upstream `a868d2abe` (fork `modernize/main` `358f882e4`).
 Every `path:line` below is quoted together with the symbol on that line, so the reference
 can be found again by symbol after an upstream sync moves the lines.
@@ -33,8 +33,21 @@ records which worker PIDs exist, except `config/reloadalas` during an update (§
 
 ### 2.1 PyWebIO session (`module/webui/app.py`, class `AlasGUI`)
 
-Each browser session has its own `AlasGUI` and its own `TaskHandler` (`module/webui/utils.py:117`)
-that runs generators on the session thread. All callers below run there unless noted.
+Each browser session has its own `AlasGUI`. `Base.__init__` creates a `WebIOTaskHandler`
+(`module/webui/base.py:15` `self.task_handler = WebIOTaskHandler()`), a `TaskHandler`
+(`module/webui/utils.py:117`) whose loop runs on **its own daemon thread** (`utils.py:231-243`
+`_get_thread` / `start`), registered with the PyWebIO session (`utils.py:256-260` `register_thread(thread)`).
+`Base.stop` stops it when the session ends (`base.py:16-20` `defer_call(self.stop)`).
+
+Two kinds of callers below run on different threads, which matters for the lifecycle races:
+
+- **Polls**: every row with a polling interval (aside icons, header status, switch `get_state`,
+  overview task list, `put_log`) runs as a generator on that session's task-handler thread.
+- **Click callbacks**: the `onclick` lambdas (`start()`, `stop()`, Force restart, update/cancel buttons)
+  are dispatched by PyWebIO for the session, not on the task-handler thread.
+
+So a click can run concurrently with the same session's polls, and every session adds its own pair of
+threads. The global `task_handler` thread (§2.4) and uvicorn's startup/shutdown thread come on top.
 
 | Caller | file:line | Call | Polling | Notes |
 |--------|-----------|------|---------|-------|
@@ -164,7 +177,7 @@ Mapped to the findings in PLAN §1, plus new ones (N1–N12).
 | N9 | Reload signal is not ordered after cleanup | `updater.py:256-257`, `gui.py:101-102` | The supervisor can kill the server while `clearup()` is still stopping workers, leaving orphans. Becomes likely once `stop()` joins (P1.2). |
 | N10 | Scheduled update self-joins the task-handler thread | `app.py:1453`, `updater.py:295`, `app.py:1478`, `utils.py:246-249` | `RuntimeError` inside `clearup()`; any work after `task_handler.stop()` is skipped, and the scheduled update task is removed. |
 | N11 | `clearup()` iterates the live registry with no shutdown gate | `app.py:1475` | A session's `get_manager()` can insert during iteration (`RuntimeError: dictionary changed size during iteration`), and a start that races cleanup (button, `restart_processes`) can spawn a worker after its instance was stopped. Nothing rejects starts once shutdown begins. |
-| N12 | One uvicorn worker is assumed, not enforced | `gui.py:83-85` | `uvicorn.run(...)` omits `workers`, and uvicorn 0.17.6 then reads `WEB_CONCURRENCY` (upstream `uvicorn/config.py:331-332`; `uvicorn/main.py:449-456` starts a multiprocess supervisor when `workers > 1`). With `WEB_CONCURRENCY=2`, two servers each have their own registry and each runs the `--run`/`reloadalas` startup hook, so each spawns its own ALAS worker for the same instance. P1.2's in-process locks cannot prevent that. (Read from the uvicorn 0.17.6 source, not reproduced on the Windows host.) |
+| N12 | One uvicorn worker is assumed, not enforced | `gui.py:83-85` | `uvicorn.run(...)` omits `workers`, and uvicorn 0.17.6 then reads `WEB_CONCURRENCY` (upstream tag 0.17.6: `uvicorn/config.py:353-354` reads `WEB_CONCURRENCY`; `uvicorn/main.py:459-461` starts the `Multiprocess` supervisor when `workers > 1`). With `WEB_CONCURRENCY=2`, two servers each have their own registry and each runs the `--run`/`reloadalas` startup hook, so each spawns its own ALAS worker for the same instance. P1.2's in-process locks cannot prevent that. Even with only one owner, a second server keeps serving PyWebIO from an empty registry: a session routed to it shows a running instance as inactive and its start goes to the wrong registry. (Read from the uvicorn 0.17.6 source, not reproduced on the Windows host.) |
 | j | `kill()` instead of `terminate()` is deliberate upstream | `orphanSlayer.py:24-36` (#883) | On Windows `terminate()` and `kill()` are both `TerminateProcess`, so a `terminate → join → kill` sequence behaves the same there. On *nix/docker, sub-subprocesses started by a mod (e.g. AlasFpyBridge) are not reached by either; orphanSlayer covers them. P1.2 must not remove or bypass that path. |
 
 ---
@@ -178,12 +191,12 @@ The PLAN §4 P1 invariants, with today's status and where each is enforced and p
 | At most one worker per instance | **Violated** (F3, N1, N12) | P1.2: class-level registry lock for `get_manager`; per-instance lock around every transition. Across servers: see "Single uvicorn worker" | P1.3 "concurrent start ×20 → 1 process": 20 threads each call `ProcessManager.get_manager(fresh_name).start(...)` for the **same name that is not yet in the registry**, released together by a barrier. Assert one registry entry, one spawned fake worker (count spawns in the fake target factory), and every thread got the same manager object. |
 | Concurrent starts never duplicate | **Violated** (F3) | P1.2: `start` idempotent under the per-instance lock (`starting`/`running` → no-op) | P1.3 concurrent start ×20 (above), plus the same race on a pre-created manager so the per-instance lock is tested on its own |
 | Stop returns after confirmed exit | **Violated** (F4) | P1.2: stop event → `terminate()` → `join(t)` → `kill()` → `join()`; state `stopped` only after `join` returns | P1.3 "stop confirms exit": start a fake worker that ignores the stop event (and, on *nix, ignores SIGTERM so the `kill()` fallback is exercised), keep the **original** `Process` handle (and its PID) taken while it was alive, call `stop()`, and assert immediately on return that `handle.is_alive()` is `False`, `handle.exitcode is not None`, and (psutil if available) the PID is gone. "Stop when stopped" and "repeated stop" stay as separate idempotence tests; they do not prove the join. |
-| Restart cannot race shutdown | **Violated**: `restart_processes` and `stop()` share no lock (`updater.py:235` vs `:241`); nothing gates starts during server cleanup (N11) | P1.2: `restart` = `stop()` then `start()` under one lock; `start` during `stopping` waits. P1.4: a **server-wide shutdown gate** in `InstanceService`: `shutdown()` takes the registry lock, closes the gate, takes a stable snapshot (`list(...)`) of the registry, releases the lock, then stops every instance in the snapshot. `get_manager()` and `start()` check the gate under the registry lock; `start()` checks it **again after acquiring the per-instance lock**, so a start that was waiting behind a stop is rejected (logged, no spawn) once the gate is closed. `clearup()` calls `shutdown()` instead of iterating `_processes` itself. | P1.3 "start during stop", "restart race". P1.4 "start races server cleanup": threads keep calling `get_manager(name).start()` (existing and fresh names) and `restart_processes([...])` while another thread runs the real `clearup()` path with fake workers. Assert no `RuntimeError`, no fake worker alive after `clearup()` returns, no spawn after the gate closed, and later starts are rejected. |
+| Restart cannot race shutdown | **Violated**: `restart_processes` and `stop()` share no lock (`updater.py:235` vs `:241`); nothing gates starts during server cleanup (N11) | P1.2: `restart` = `stop()` then `start()` under one lock; `start` during `stopping` waits. P1.4: a **server-wide shutdown gate** in `InstanceService`, with **launch serialized against gate closure**. One server-wide `launch_lock` guards the gate flag and the registry. `start()` takes its per-instance lock, then takes `launch_lock` and holds it **from the gate check through `Process.start()` and recording the handle on the instance** (state `starting`, handle set). `shutdown()` takes `launch_lock`, closes the gate, takes a stable snapshot (`list(...)`) of the registry, then releases `launch_lock` and stops every instance in the snapshot, taking each per-instance lock in turn. Either a launch finishes and is registered before closure, so the snapshot sees it and stops it, or it runs after closure, sees the gate closed and spawns nothing. No start can check the gate, lose the lock, and spawn later. Lock order is always per-instance → `launch_lock`. `shutdown()` never holds `launch_lock` while waiting for a per-instance lock, so there is no deadlock. `get_manager()` inserts under `launch_lock` too. `Process.start()` returns once the child is created, so holding the lock across it serializes spawns only briefly. `clearup()` calls `shutdown()` instead of iterating `_processes` itself. | P1.3 "start during stop", "restart race". P1.4 "start vs. shutdown, forced interleavings", using a test seam (`InstanceService` hook called between the gate check and `Process.start()`, and one in `shutdown()` right after closing the gate). (a) The start thread blocks in the pre-spawn hook. Shutdown runs on another thread; assert it has **not** taken its snapshot while the start is paused. Release the start; assert shutdown's snapshot contains the new worker and no worker is alive when `shutdown()` returns. (b) Shutdown blocks in its post-close hook; a start is attempted; assert it is rejected and the fake target's spawn counter stays 0. A concurrent stress loop (threads calling `get_manager(name).start()` on existing and fresh names, and `restart_processes([...])`, against the real `clearup()`) is kept as a supplement only. Assert no `RuntimeError`, no fake worker alive after `clearup()` returns, and later starts rejected. |
 | Failure ≠ deliberate stop | **Violated** (F5, N2, N3) | P1.2: outcome classification (§6.1) from backend-owned signals, never log text | P1.3 outcome matrix (§6.1): one test per row, including a caught exception that today exits with code 0 |
 | State comes from backend ownership only | **Partly holds**: no browser writes state, but it is derived from log text | P1.2: explicit state machine `stopped → starting → running → stopping → stopped`, `running → failed`, `revision` bumped on each transition; `.state` int mapped from it | P1.3 state/revision assertions |
 | Status survives a GUI session closing | **Holds** (registry is class-level; sessions hold references only) | Keep: `InstanceService` is process-wide, not per session | P1.3 "status survives a GUI session closing" |
-| Server restart → no duplicate or silently orphaned workers | **Violated** (F7, N9, N10) | P1.4: PID file written on start / removed on confirmed exit; adopt-or-kill on startup; deterministic `clearup()` through the shutdown gate. The reload signal must be sent **only after `clearup()` has returned**. Preferred fix: in `_run_update`, call `clearup()` before `_trigger_reload()`, a two-line reorder in `updater.py` that needs review to add it to PLAN §7. The alternative without touching `updater.py`: `clearup()` blocks until every worker is confirmed gone and the timer is re-armed from `clearup()`. `clearup()` must not join `task_handler` from its own thread: skip the join when `threading.current_thread() is task_handler._thread`. | P1.4 orphan test. P1.4 "scheduled update reload": run `updater.schedule_update()` (or `_run_update`) **on a real `TaskHandler` thread**, with `State.restart_event` replaced by a recording event, `update()` stubbed to succeed, and fake workers whose stop takes longer than the 2 s timer. Assert that when `restart_event` is set, every fake worker has already exited and `clearup()` has finished ("Alas closed." logged, the cleanup-done flag set), and that no `RuntimeError: cannot join current thread` was raised. |
-| Single uvicorn worker | **Holds only while `WEB_CONCURRENCY` is unset** (N12): `gui.py:83-85` omits `workers=`, so uvicorn 0.17.6 falls back to `WEB_CONCURRENCY` | P1.4: an **owner lock** taken by `InstanceService` at server startup, before the `restart_processes` startup hook, with `filelock` (3.3.0, already installed) on a git-ignored path such as `config/tmp/control.lock`. A second server process that cannot take it within a short timeout logs an error and refuses to own instances: its startup hook spawns nothing and its `start()` is rejected. This also covers two `gui.py` launched by hand. Optional, needs review to add `gui.py` to PLAN §7: pass `workers=1` explicitly in `gui.py:83-85`. P7 must not add workers. | P1.4 "second owner refused": two processes build an `InstanceService` on the same lock path. The second refuses to start a fake worker, and only one worker exists. |
+| Server restart → no duplicate or silently orphaned workers | **Violated** (F7, N9, N10) | P1.4: PID file written on start / removed on confirmed exit; adopt-or-kill on startup; deterministic `clearup()` through the shutdown gate. **Registration handshake** for the window between spawn and PID file. The child is started with the read end of a one-way `Pipe` (`duplex=False`) and the owner's PID. Before doing any work (before importing `alas` or any mod, and before the outcome wrapper dispatches), the child waits for a `go` message from the owner, polling in short slices (`conn.poll(0.5)`). It exits immediately with a dedicated "unregistered" exit code, without running the target, if (a) the pipe reports EOF (the owner died, so its write end closed), (b) the owner PID is gone or is no longer its parent (`os.getppid()` / psutil), or (c) no `go` arrives within a registration timeout (e.g. 30 s). On *nix fork the child must close any inherited copy of the write end, or EOF never arrives. The owner writes the PID file atomically (PID, process create time, run id), then sends `go`. If the owner crashes anywhere before `go`, the child stays idle and exits, so the next server never meets an unrecorded worker that is doing work. The next server cleans up stale PID files whose PID is gone or whose create time differs (PID reuse). The reload signal must be sent **only after `clearup()` has returned**. Preferred fix: in `_run_update`, call `clearup()` before `_trigger_reload()`, a two-line reorder in `updater.py` that needs review to add it to PLAN §7. The alternative without touching `updater.py`: `clearup()` blocks until every worker is confirmed gone and the timer is re-armed from `clearup()`. `clearup()` must not join `task_handler` from its own thread: skip the join when `threading.current_thread() is task_handler._thread`. | P1.4 orphan test. P1.4 "crash between spawn and registration": an owner subprocess builds an `InstanceService`, starts a fake worker whose target writes a marker file, and `os._exit()`s from a test hook placed after `Process.start()` and before the PID file is written. Assert the worker exits within the registration timeout with the "unregistered" code, the marker file was never written, and no PID file exists. A fresh owner started afterwards spawns exactly one worker. Same test with the owner killed between writing the PID file and sending `go`: the worker still exits unregistered, and the new owner removes the stale PID file. P1.4 "scheduled update reload": run `updater.schedule_update()` (or `_run_update`) **on a real `TaskHandler` thread**, with `State.restart_event` replaced by a recording event, `update()` stubbed to succeed, and fake workers whose stop takes longer than the 2 s timer. Assert that when `restart_event` is set, every fake worker has already exited and `clearup()` has finished ("Alas closed." logged, the cleanup-done flag set), and that no `RuntimeError: cannot join current thread` was raised. |
+| Single uvicorn worker | **Holds only while `WEB_CONCURRENCY` is unset** (N12): `gui.py:83-85` omits `workers=`, so uvicorn 0.17.6 falls back to `WEB_CONCURRENCY` | **Required: exactly one uvicorn worker, and a server that cannot own instances must not serve.** P1.4: (1) Pass `workers=1` explicitly in `gui.py:83-85`, so uvicorn ignores `WEB_CONCURRENCY`. This is a one-argument upstream edit that needs review to add `gui.py` to PLAN §7. Until that lands, startup aborts when `int(os.environ.get("WEB_CONCURRENCY", "1")) > 1`, with an error that names the variable. (2) An **owner lock** with `filelock` (3.3.0, already installed) on a git-ignored path such as `config/tmp/control.lock`, taken in the **first** `on_startup` callback, before `startup()`'s `State.init()` and before the `restart_processes` hook (`app.py:1547-1550`). If the lock cannot be taken within a short timeout, the callback raises. Starlette runs `on_startup` callbacks in order and stops at the first exception, so `restart_processes` never reads or deletes `config/reloadalas` and nothing is spawned. The ASGI lifespan then reports startup failure and that uvicorn server exits instead of serving PyWebIO from an empty registry. (Starlette 0.14.2 sends `lifespan.startup.failed` and uvicorn 0.17.6 then stops the server; confirm on the Windows host during P1.4, because the test below covers the Starlette side only.) This also covers two `gui.py` launched by hand. P7 must not add workers. | P1.4 "second owner aborts startup", through the real startup path: a helper process holds the owner lock. In the test, write a `config/reloadalas` naming a fake instance in a temp working directory, build `module.webui.app:app()` with heavy pieces stubbed, and enter its lifespan (Starlette `TestClient` as a context manager). Assert startup raises, `config/reloadalas` still exists unchanged, the spawn counter is 0, and `State.init()` was not called. Release the lock, repeat, and assert startup succeeds, the instance is started once, and `reloadalas` is consumed. A second test sets `WEB_CONCURRENCY=2` and asserts startup aborts before `restart_processes`. |
 | Lifecycle works with no GUI session open | **Holds** for `--run`/`reloadalas`; there is no API yet | P2 API on top of `InstanceService` | P2.2 TestClient tests |
 
 ---
@@ -236,15 +249,34 @@ A flag set only by `pm.stop()` is not enough. The updater stops workers by setti
 (`process_manager.py:167-183`). P1.2 classifies an exited run from backend-owned signals, in this order:
 
 1. **Worker outcome record.** Before exit, the worker reports one of `finished`, `update`, `failed` over a
-   per-run channel owned by `InstanceService`, not the SyncManager: a `multiprocessing.Value`, or a
-   one-shot `Pipe` created per `start()`. A small wrapper writes it around the dispatch, in
-   `module/control/` so tests can import it without heavy deps, called from `run_process`:
-   - normal return → `finished`, unless the stop event is set at that moment → `update` (covers the
-     `alas.py:559-563` `break`);
-   - `SystemExit` with code 0/`None` while the stop event is set → `update` (covers `alas.py:489`
-     `exit(0)`); other `SystemExit` → `failed` if the code is non-zero, else `finished`;
-   - `Exception` caught at `process_manager.py:182-183` → `failed`, and the worker then exits with a
-     **non-zero code** (e.g. 1) instead of 0.
+   per-run channel owned by `InstanceService`, not the SyncManager. **The read must not be able to block
+   on a dead child.** A default `multiprocessing.Value` wraps the value in a process-shared lock
+   (CPython 3.7 `Lib/multiprocessing/sharedctypes.py:70-82`). A worker killed while holding that lock
+   during the write would leave it held, and the owner's read could hang after `join()` has already
+   confirmed exit. So the channel is **lock-free**: two single-byte slots from
+   `multiprocessing.RawValue('b', 0)` (no lock, a one-byte store cannot tear), created per `start()`.
+   The owner reads them **only after `join()` has confirmed exit**. A `Pipe` is not used for the outcome:
+   a child killed mid-`send` can leave a partial message, and `recv()` would block on it even after
+   `poll()` said data was present.
+   - Slot `stop_seen` records **the worker's own stop decision**, not a later read of the shared event.
+     Inside the child, the outcome wrapper (in `module/control/`, imported by `run_process`, so tests
+     need no heavy deps) gives the target an `ObservedStopEvent` instead of the raw manager event: it is
+     assigned to `AzurLaneConfig.stop_event`, `AzurLaneAutoScript.stop_event` and `mod.set_stop_event()`
+     at `process_manager.py:158`, `:165`, `:175`. Its `is_set()` delegates to the real event and **writes
+     the result into `stop_seen` on every call**. Every stop path in the worker acts on the value it just
+     read: `alas.py:486-489` `exit(0)`, `alas.py:560-563` `break`, `config.py:612-613` then the loop check
+     at `alas.py:560`. So at exit, `stop_seen` holds the value that decided whether to stop. An updater
+     cancel that clears the event afterwards (`updater.py:234`) cannot change it. An event set after the
+     worker's last check cannot mark a natural finish as an update.
+   - Slot `outcome`, written by the wrapper as its last action:
+     - normal return → `update` if `stop_seen` is set, else `finished` (covers the `alas.py:559-563`
+       `break`, and a tool that returns without ever checking the event);
+     - `SystemExit` with code 0/`None` → `update` if `stop_seen` is set (covers `alas.py:489` `exit(0)`),
+       else `finished`; non-zero `SystemExit` → `failed`;
+     - `Exception` caught at `process_manager.py:182-183` → `failed`, and the worker then exits with a
+       **non-zero code** (e.g. 1) instead of 0.
+   - The owner trusts `outcome` only together with exit code 0 (or when it says `failed`). Exit ≠ 0 means
+     `failed` whatever the slot says, unless `stop_requested` (2.) is set.
    The `Reason: ...` log lines stay for users.
 2. **Deliberate stop.** `stop()` sets `stop_requested` under the per-instance lock before signalling the
    worker.
@@ -262,7 +294,20 @@ A flag set only by `pm.stop()` is not enough. The updater stops workers by setti
 P1.3 covers each row with a fake target run through the same wrapper, including **an exception
 caught by the wrapper whose old code path would have exited with 0**, an `exit(0)` with the event set,
 an event set directly by the test (not via `stop()`), and a tool-style target that simply returns.
-Each test asserts state, `.state` int and `revision`, and none parses log text.
+Each test asserts state, `.state` int and `revision`, and none parses log text. Ordering and robustness
+tests, each using a pipe-based handshake so the interleaving is forced, not timed:
+
+- **Update taken, then cancel**: the target polls `stop_event.is_set()`, sees `True` and returns (and a
+  variant calls `exit(0)`). After the worker has exited, the test clears the event, as the updater's
+  cancel at `updater.py:234` does, and only then lets the owner classify. Expect `stopped`/update, int 4.
+- **Natural finish, then event**: the target checks the event once (`False`), then blocks on the
+  handshake. The test sets the event, then releases the target, which returns **without checking again**.
+  Expect `stopped`/finished, int 2, not 4.
+- **Death during outcome publication**: a test hook inside the wrapper's publish step blocks. The
+  owner kills the child there, and in a variant the child `os._exit(1)`s there. Assert classification
+  returns within a short bound (e.g. 1 s after `join()`) and yields `failed`, and that the channel
+  objects expose no lock (`not hasattr(slot, "get_lock")`). That is a guard against a regression to a
+  locked `Value`.
 
 ---
 
