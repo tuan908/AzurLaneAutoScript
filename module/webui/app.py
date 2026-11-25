@@ -1560,15 +1560,23 @@ def app():
     # Control plane API at /api/v1, sharing ProcessManager with the GUI above
     from module.control.api import ControlApi, mount_control_api
     from module.control.configuration import ConfigService
+    from module.control.health import HealthMonitor, PolicyStore
     from module.control.instances import InstanceService
+    instance_service = InstanceService(
+        list_instances=alas_instance,
+        get_manager=ProcessManager.get_manager,
+        default_func=get_config_mod,
+        stop_event=lambda: updater.event,
+        tasks=_instance_tasks,
+    )
+    monitor = HealthMonitor(instance_service, PolicyStore(), log_queue_alive=_log_queue_manager_alive)
+    instance_service.health = monitor.instance_health
+    # Start after the GUI's startup (SyncManager ready); stop before clearup() stops the
+    # workers, so a shutdown is never "recovered"
+    app.router.on_startup.append(monitor.start)
+    app.router.on_shutdown.insert(0, monitor.stop)
     mount_control_api(app, ControlApi(
-        InstanceService(
-            list_instances=alas_instance,
-            get_manager=ProcessManager.get_manager,
-            default_func=get_config_mod,
-            stop_event=lambda: updater.event,
-            tasks=_instance_tasks,
-        ),
+        instance_service,
         password=key,
         health_details=lambda: {"logQueueManagerAlive": _log_queue_manager_alive()},
         config=ConfigService(
@@ -1582,6 +1590,7 @@ def app():
             save_callback=State.config_updater.save_callback,
             lock=lambda name: config_lock(name, timeout=10, required=True),
         ),
+        monitor=monitor,
     ), dashboard_dir=os.path.abspath("./dashboard/dist"))
 
     return app

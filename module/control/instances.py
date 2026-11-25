@@ -21,6 +21,7 @@ class InstanceService:
             default_func: Callable[[str], str],
             stop_event: Callable[[], Optional[threading.Event]] = lambda: None,
             tasks: Optional[Callable[[str], dict]] = None,
+            health: Optional[Callable[[str], Optional[dict]]] = None,
     ):
         """
         Args:
@@ -35,6 +36,8 @@ class InstanceService:
         self._default_func = default_func
         self._stop_event = stop_event
         self._tasks = tasks
+        # Set later by the health monitor, which itself reads statuses from this service
+        self.health = health
 
     def _manager(self, instance_id: str):
         if instance_id not in set(self._list_instances()):
@@ -46,26 +49,32 @@ class InstanceService:
         if instance_id not in set(self._list_instances()):
             raise UnknownInstance(instance_id)
 
+    def _status(self, manager) -> dict:
+        status = manager.status()
+        if self.health is not None:
+            status["health"] = self.health(status["id"])
+        return status
+
     def list_instances(self) -> List[dict]:
-        return [self._get_manager(name).status() for name in self._list_instances()]
+        return [self._status(self._get_manager(name)) for name in self._list_instances()]
 
     def get_status(self, instance_id: str) -> dict:
-        return self._manager(instance_id).status()
+        return self._status(self._manager(instance_id))
 
     def start(self, instance_id: str) -> dict:
         manager = self._manager(instance_id)
         manager.start(self._default_func(instance_id), self._stop_event())
-        return manager.status()
+        return self._status(manager)
 
     def stop(self, instance_id: str) -> dict:
         manager = self._manager(instance_id)
         manager.stop()
-        return manager.status()
+        return self._status(manager)
 
     def restart(self, instance_id: str) -> dict:
         manager = self._manager(instance_id)
         manager.restart(self._default_func(instance_id), self._stop_event())
-        return manager.status()
+        return self._status(manager)
 
     def logs(self, instance_id: str, after: int = 0, limit: int = 500) -> dict:
         return self._manager(instance_id).log_since(after, limit)

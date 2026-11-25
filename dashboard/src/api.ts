@@ -12,6 +12,47 @@ export interface InstanceStatus {
   lastError: string | null;
   legacyState: number;
   revision: number;
+  health?: InstanceHealth | null;
+}
+
+export type HealthState = "ok" | "idle" | "stopped" | "stalled" | "crashed" | "human_takeover";
+
+export interface InstancePolicy {
+  autoRestart: boolean;
+  restartOnStall: boolean;
+  stallMinutes: number;
+}
+
+export interface InstanceHealth {
+  state: HealthState;
+  detail: string;
+  recovery: {
+    policy: InstancePolicy;
+    restartsLastHour: number;
+    nextAttemptAt: string | null;
+    pendingReason: string | null;
+    gaveUp: boolean;
+  };
+}
+
+export interface HealthCheck {
+  name: string;
+  status: "ok" | "warn" | "fail";
+  detail: string;
+}
+
+export interface RecoveryPolicy {
+  maxRestartsPerHour: number;
+  backoffSeconds: number[];
+  instances: Record<string, Partial<InstancePolicy>>;
+}
+
+export interface RecoveryEvent {
+  time: string;
+  instanceId: string;
+  action: string;
+  reason: string;
+  detail: string;
 }
 
 export interface Health {
@@ -22,6 +63,7 @@ export interface Health {
   uptimeSeconds: number;
   instances: { total: number; running: number; failed: number };
   logQueueManagerAlive?: boolean | null;
+  health?: { status: "ok" | "warn" | "fail"; checks: HealthCheck[] };
 }
 
 export interface Task {
@@ -150,6 +192,9 @@ export const api = {
   configSchema: (id: string, lang: string) =>
     request<ConfigSchema>(`/instances/${encodeURIComponent(id)}/config/schema?lang=${encodeURIComponent(lang)}`),
   config: (id: string) => request<ConfigDoc>(`/instances/${encodeURIComponent(id)}/config`),
+  recovery: () => request<{ policy: RecoveryPolicy; history: RecoveryEvent[] }>("/recovery"),
+  updatePolicy: (changes: Partial<Omit<RecoveryPolicy, "instances">> & { instances?: Record<string, Partial<InstancePolicy>> }) =>
+    request<{ policy: RecoveryPolicy }>("/recovery/policy", "PATCH", changes),
   updateConfig: (id: string, revision: string, changes: Record<string, ConfigValue>) =>
     request<{ revision: string; applied: Record<string, ConfigValue> }>(
       `/instances/${encodeURIComponent(id)}/config`,

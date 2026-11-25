@@ -71,9 +71,11 @@ class ControlApi:
             password: Optional[str] = None,
             health_details: Callable[[], Dict] = dict,
             config: Optional[ConfigService] = None,
+            monitor=None,
     ):
         self.service = service
         self.config = config
+        self.monitor = monitor
         self.password = password or None
         self.health_details = health_details
         self.started_at = time.time()
@@ -164,7 +166,22 @@ class ControlApi:
             },
         }
         body.update(self.health_details())
+        if self.monitor is not None:
+            body["health"] = self.monitor.checks()
         return JSONResponse(body)
+
+    def recovery(self, request: Request) -> JSONResponse:
+        return JSONResponse(self.monitor.snapshot())
+
+    async def recovery_policy(self, request: Request) -> JSONResponse:
+        if not request.headers.get("content-type", "").startswith("application/json"):
+            return _error(415, "unsupported_media_type", "Send Content-Type: application/json")
+        try:
+            body = await request.json()
+        except Exception:
+            raise ValueError("Body is not valid JSON")
+        policy = await run_in_threadpool(self.monitor.policy.update, body)
+        return JSONResponse({"policy": policy})
 
     def list_instances(self, request: Request) -> JSONResponse:
         return JSONResponse({"instances": self.service.list_instances()})
@@ -247,7 +264,12 @@ class ControlApi:
                 statuses = await run_in_threadpool(service.list_instances)
                 for status in statuses:
                     iid = status["id"]
-                    key = (status["revision"], status["state"], status["currentTask"])
+                    health = status.get("health") or {}
+                    recovery = health.get("recovery") or {}
+                    key = (status["revision"], status["state"], status["currentTask"], health.get("state"),
+                           health.get("detail") if health.get("state") == "stalled" else None,
+                           recovery.get("nextAttemptAt"), recovery.get("gaveUp"), recovery.get("restartsLastHour"),
+                           json.dumps(recovery.get("policy"), sort_keys=True))
                     if status_seen.get(iid) != key:
                         status_seen[iid] = key
                         event_id += 1
@@ -288,7 +310,10 @@ class ControlApi:
             Route("/instances/{instance_id}/config/schema", g(self.config_schema), methods=["GET"]),
             Route("/instances/{instance_id}/config", g(self.config_read), methods=["GET"]),
             Route("/instances/{instance_id}/config", g(self.config_update), methods=["PATCH"]),
-        ] if self.config is not None else [])
+        ] if self.config is not None else []) + ([
+            Route("/recovery", g(self.recovery), methods=["GET"]),
+            Route("/recovery/policy", g(self.recovery_policy), methods=["PATCH"]),
+        ] if self.monitor is not None else [])
 
     def mount(self) -> Mount:
         return Mount(API_PREFIX, routes=self.routes())

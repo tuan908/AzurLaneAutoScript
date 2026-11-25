@@ -3,15 +3,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api, setToken, type InstanceStatus, type Task } from "./api";
 import { connectEvents, useConnection } from "./events";
 import { useLogs } from "./logStore";
+import { HealthBadge, HealthPanel } from "./HealthPanel";
 import { Settings } from "./Settings";
 
-type Tab = "overview" | "settings";
+type Tab = "overview" | "settings" | "health";
+const TABS: Tab[] = ["overview", "settings", "health"];
 
 /** Location is #/<instance>/<tab> */
 function useRoute(ids: string[]): [string | null, Tab, (id: string, tab?: Tab) => void] {
   const read = (): [string | null, Tab] => {
     const [id, tab] = window.location.hash.replace(/^#\/?/, "").split("/");
-    return [id ? decodeURIComponent(id) : null, tab === "settings" ? "settings" : "overview"];
+    return [id ? decodeURIComponent(id) : null, TABS.includes(tab as Tab) ? (tab as Tab) : "overview"];
   };
   const [route, setRoute] = useState(read);
   useEffect(() => {
@@ -90,6 +92,11 @@ function Header() {
             </span>
             {h.instances.failed > 0 && <span className="text-failed">{h.instances.failed} failed</span>}
             {h.logQueueManagerAlive === false && <span className="text-failed">log queue manager down</span>}
+            {h.health && (
+              <span className={`conn conn-${h.health.status === "ok" ? "open" : h.health.status === "warn" ? "connecting" : "closed"}`}>
+                health {h.health.status}
+              </span>
+            )}
           </>
         )}
         <span className={`conn conn-${connection}`} title="Live updates">
@@ -119,7 +126,10 @@ function InstanceList({
           onClick={() => onSelect(s.id)}
         >
           <span className="instance-name">{s.id}</span>
-          <StateBadge state={s.state} />
+          <span className="badges">
+            <HealthBadge status={s} />
+            <StateBadge state={s.state} />
+          </span>
           <span className="muted small">{s.currentTask ?? (s.state === "running" ? "waiting for task" : "")}</span>
         </button>
       ))}
@@ -226,6 +236,9 @@ function InstancePanel({ status, tab, onTab }: { status: InstanceStatus; tab: Ta
             <button className={tab === "settings" ? "" : "secondary"} onClick={() => onTab("settings")}>
               Settings
             </button>
+            <button className={tab === "health" ? "" : "secondary"} onClick={() => onTab("health")}>
+              Health
+            </button>
           </div>
           <div className="actions">
             {!alive && (
@@ -275,6 +288,8 @@ function InstancePanel({ status, tab, onTab }: { status: InstanceStatus; tab: Ta
 
       {tab === "settings" ? (
         <Settings key={status.id} id={status.id} />
+      ) : tab === "health" ? (
+        <HealthPanel key={status.id} status={status} />
       ) : (
         <>
       <section className="card">
