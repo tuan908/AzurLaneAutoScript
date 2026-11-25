@@ -1194,14 +1194,19 @@ class CsvSink:
                 opened = True
                 f.write(text)
                 f.flush()
-        except OSError as e:
-            self._warn(e)
+        except BaseException as e:
+            # Any interruption after the file was opened (OSError, or Ctrl+C landing
+            # mid-write) may leave a partial row: cut back before anything else is
+            # appended, including the shutdown retry of the same pending rows.
             if opened:
                 self.repair_size = size
                 try:
                     self._repair()
                 except OSError:
                     pass
+            if not isinstance(e, OSError):
+                raise
+            self._warn(e)
             return False
         self.pending = []
         self.dropped_reported = self.dropped

@@ -1121,6 +1121,35 @@ def test_csv_partial_write_is_cut_back(tmp_path, monkeypatch):
     assert sink.ok
 
 
+class HalfFileInterrupted(HalfFile):
+    """Writes half of the text, then gets Ctrl+C"""
+
+    def write(self, text):
+        self.f.write(text[:len(text) // 2])
+        self.f.flush()
+        raise KeyboardInterrupt
+
+
+def test_csv_keyboard_interrupt_mid_write_is_cut_back(tmp_path, monkeypatch):
+    path = str(tmp_path / 'soak.csv')
+    sink = CsvSink(path)
+    assert sink.write([{'kind': 'probe', 'sample': 1}])
+    good_size = os.path.getsize(path)
+
+    real_open = patch_append(monkeypatch, HalfFileInterrupted)
+    with pytest.raises(KeyboardInterrupt):
+        sink.write([{'kind': 'probe', 'sample': 2, 'cmdline': 'x' * 200}])
+    monkeypatch.setattr('builtins.open', real_open)
+    assert os.path.getsize(path) == good_size
+
+    # The shutdown retry rewrites the pending rows on a clean tail
+    assert sink.write([])
+    rows = read_csv(path)
+    assert all(len(row) == len(COLUMNS) for row in rows)
+    assert [row[COLUMNS.index('sample')] for row in rows[1:]] == ['1', '2']
+    assert sink.ok
+
+
 def test_csv_no_append_while_tail_cannot_be_repaired(tmp_path, monkeypatch):
     path = str(tmp_path / 'soak.csv')
     sink = CsvSink(path)
