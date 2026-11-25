@@ -1,21 +1,23 @@
 # Run the control server on Windows
 
-Build the dashboard from this checkout before copying the code and `dashboard/dist` into the
-Windows ALAS installation. Keep the installation's `toolkit/` and `config/` directories.
+Stop the Windows ALAS launcher before updating the installation. From the repository root
+in WSL, run the sync script with Git, Bun and rsync installed:
 
 ```sh
-cd dashboard
-bun install --frozen-lockfile
-bun run build
+bash deploy/Windows/sync-from-wsl.sh
 ```
 
-Stop the existing ALAS launcher before starting the control server for that installation.
+It builds the dashboard and syncs tracked source files to `D:\alas-modernize`. Pass an
+alternate WSL path such as `/mnt/d/AnotherAlas` to update a different installation. Replaced
+files are backed up beside the installation. Local configuration, logs, toolkit and Git
+metadata are preserved. Files deleted from source stay in the target.
+
 Double-click `start-control.vbs` in File Explorer to launch it without a console window.
 Startup output goes to `log/control-launch.log`.
 
 Open [ALAS Control Center](http://127.0.0.1:22267/dashboard/). The batch file builds missing
-dashboard assets if Bun is available. After a code update, rebuild on the development machine
-and replace `dashboard/dist` with the new build. For a visible diagnostic launch or to start
+dashboard assets if Bun is available. Run the sync script again after a code update.
+For a visible diagnostic launch or to start
 a specific profile, use `start-control.bat` with `--port 22367` or `--run profile-name` as needed.
 Press Ctrl+C in a visible launcher window for a graceful shutdown. For a manual hidden launch,
 stop any running profiles from the dashboard before ending the server in Task Manager. Closing the browser leaves the
