@@ -71,6 +71,13 @@ upstream/master ──► master (fork mirror, untouched)
 - Slice branch name: `modernize/<slice-id-lowercase-with-dash>-<slug>`, e.g. `modernize/p1-2-lifecycle-lock`.
 - Commit style follows upstream: `Add: ...`, `Fix: ...`, `Upd: ...`, `Doc: ...`, `Test: ...`.
 - Every slice must leave the legacy PyWebIO GUI working.
+- **Every slice ships implementation and documentation together**, on the same branch. A code slice
+  updates the doc it affects (`lifecycle.md` for P1, `api.md` P2, `events.md` P3, `dashboard/README.md`
+  P4, `config.md` P5, `recovery.md` P6, `operations.md` P7): what changed, how to use it, which
+  invariants and defects it closes. When a slice fixes an item listed in a doc's open findings, it
+  marks that item resolved there. No doc-only slices: analysis slices also ship the code their
+  findings justify (or a test or tool that captures the evidence). P1.1 landed before this rule, as the
+  doc-only spec for P1.2–P1.4.
 - GPL-3.0 obligations apply if the modified build is distributed.
 
 ### Verification commands (used by the workflows)
@@ -103,13 +110,13 @@ process, the uvicorn server, or the worker — before changing anything.
 |-------|------|-------|-----------|
 | P0.1 | code | `dev_tools/soak_probe.py`: stdlib + psutil (3.7). Every N s append a CSV row per process of interest — gui/uvicorn python, SyncManager child, each worker, Electron main/renderers, MuMu (`MuMuPlayer*`, `MuMuVMMHeadless*`) — with RSS, threads, handles (Windows `num_handles`), CPU; plus newest `log/*.txt` mtime and last log line timestamp; plus HTTP `GET /` status+latency of the GUI. Survives target processes dying. | Runs on Windows for 10 min and produces a sane CSV; unit test for row building with fake psutil objects. |
 | P0.2 | manual | Two 72h soaks on Windows: **A** Electron as today; **B** `python gui.py --host 127.0.0.1 --port 22267` in a browser. In each, at ~24h close and reopen the UI. Run the probe; run the `alas-soak` workflow (csv mode) to analyze. | Two CSVs + notes on when/what went blank. |
-| P0.3 | doc | `doc/modernization/baseline.md`: root-cause classification with evidence, and which of F3–F9 were observed. Decide if an immediate Electron/PyWebIO workaround is worth shipping before P1. | Classification written; P6 recovery scope adjusted. |
+| P0.3 | code+doc | `doc/modernization/baseline.md`: root-cause classification with evidence, and which of F3–F9 were observed. Implement the cheapest fix or mitigation the evidence supports (e.g. an Electron/PyWebIO workaround, or a regression test or probe check that reproduces the failure). If the evidence justifies no change yet, ship the reproduction as a test or a `soak_probe` check instead. | Classification written; fix or reproduction committed; P6 recovery scope adjusted. |
 
 ### P1 — Lifecycle ownership (6–12h)
 
 | Slice | Kind | Scope | Done when |
 |-------|------|-------|-----------|
-| P1.1 | doc | `doc/modernization/lifecycle.md`: every caller of `ProcessManager` (`app.py:163,181,1053,1475,1549`, updater, `restart_processes`, `reloadalas`), who reads `.state`, and the invariants below. | Reviewed map. |
+| P1.1 | doc (landed) | `doc/modernization/lifecycle.md`: every caller of `ProcessManager` (`app.py:163,181,1053,1475,1549`, updater, `restart_processes`, `reloadalas`), who reads `.state`, and the invariants below. | Reviewed map. |
 | P1.2 | code | `module/control/instances.py`: `InstanceService` + explicit state machine `stopped → starting → running → stopping → stopped`, `running → failed` (unexpected exit, with exit code), `revision` counter bumped on every transition. Per-instance lock from a class-level lock (race-free). `start` idempotent; `stop` = set stop event → `terminate()` → `join(t)` → `kill()` → `join()`; restart waits for stop. Deliberate stop vs failure tracked by a flag, not log parsing. `ProcessManager` delegates to it; `.state` int mapping preserved for PyWebIO. Worker target injectable for tests. | All invariants below hold under test; PyWebIO start/stop unchanged in behaviour. |
 | P1.3 | test | `tests/control/` with `requirements-test.txt` (pytest pinned for 3.8, nothing heavy) and fake workers: concurrent start ×20 → 1 process; stop when stopped; start during stop; restart race; unexpected exit → `failed`; status survives a GUI session closing. | Green on 3.8; vermin 3.7 clean. |
 | P1.4 | code | Orphan safety: PID file `config/tmp/<instance>.pid` (or similar ignored path) written on start, removed on confirmed exit; on server startup detect a live PID that is an ALAS worker (psutil cmdline check) and either adopt as `running (unmanaged)` or kill per a deploy flag. Make `clearup()` and the `EnableReload` kill path stop workers deterministically. | "Server restart → no duplicate or silently orphaned workers" test passes. |
@@ -166,8 +173,8 @@ Exit: repeated connect/disconnect and sustained log production show no unbounded
 
 | Slice | Kind | Scope | Done when |
 |-------|------|-------|-----------|
-| P6.1 | doc | `doc/modernization/recovery.md`: audit of F11 plus device reconnect and emulator restart paths in `module/device/`; map to the failure table below; mark gaps confirmed by P0. | Gap list agreed. |
-| P6.2 | code | `GET /api/v1/health/details`: server liveness, worker liveness, progress (last log/activity age vs current task), scheduler idle vs stuck, SyncManager alive. In-memory metrics: uptime, task successes/failures, worker restarts, SSE reconnects. | Tests with fake clock. |
+| P6.1 | code+doc | `doc/modernization/recovery.md`: audit of F11 plus device reconnect and emulator restart paths in `module/device/`, mapped to the failure table below, with gaps confirmed by P0 marked. Implement `GET /api/v1/health/details` with the signals the audit shows are missing: server liveness, worker liveness, progress (last log/activity age vs current task), scheduler idle vs stuck, SyncManager alive. | Gap list in the doc; health tests with a fake clock. |
+| P6.2 | code+doc | In-memory metrics (uptime, task successes/failures, worker restarts, SSE reconnects) exposed in health details; document each metric in `recovery.md`. | Tests with fake clock. |
 | P6.3 | code | Opt-in supervisor (deploy flag, per instance): restart on unexpected worker exit with bounded backoff (e.g. 3 per hour), never after `RequestHumanTakeover` or deliberate stop; stop and report after repeated failures. Only if P0/P6.1 show worker crashes. | Fault-injection tests: kill worker → failed → restart → gives up after limit. |
 | P6.4 | code | Diagnostics page (health details, metrics, recent errors). | Playwright smoke. |
 
@@ -179,8 +186,8 @@ existing app restart; MuMu hung → emulator restart last resort; repeated failu
 
 | Slice | Kind | Scope | Done when |
 |-------|------|-------|-----------|
-| P7.1 | code | `control_server.py` headless entry building the same app (PyWebIO optional), binding 127.0.0.1; `start-control.bat` using the bundled toolkit Python; optional browser open. | Starts on Windows with no Electron. |
-| P7.2 | doc | Windows Task Scheduler setup (run in user session, restart on failure), upgrade notes. | Doc reviewed. |
+| P7.1 | code+doc | `control_server.py` headless entry building the same app (PyWebIO optional), binding 127.0.0.1; `start-control.bat` using the bundled toolkit Python; optional browser open. Document start, stop, ports and auth in `doc/modernization/operations.md`. | Starts on Windows with no Electron. |
+| P7.2 | code+doc | `deploy/Windows/register-control-task.ps1`: registers or unregisters a Task Scheduler task (runs in the user session, restarts on failure, no duplicate instances). Document it with upgrade notes in `operations.md`. | Script registers and removes the task on Windows; doc reviewed. |
 | P7.3 | manual | Final 72h soak with the `alas-soak` workflow (http mode against `/api/v1/health/details`) + probe CSV; compare with P0 baseline. | No progressive degradation; report in `doc/modernization/soak-final.md`. |
 
 ---
