@@ -3,12 +3,13 @@ import { useEffect, useRef } from "react";
 import { Button } from "@/shared/ui/button";
 
 import { LogText } from "./log-highlight";
-import { logTone, severity } from "./log-severity";
+import { lineSeverities, logTone } from "./log-severity";
 import { useLogs } from "./log-store";
 
 export function LogPeek({ id, onOpen }: { id: string; onOpen: () => void }) {
   const lines = useLogs(id);
   const last = lines.slice(-14);
+  const levels = lineSeverities(lines.slice(-40));
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (last.length && ref.current) ref.current.scrollTop = ref.current.scrollHeight;
@@ -38,7 +39,7 @@ export function LogPeek({ id, onOpen }: { id: string; onOpen: () => void }) {
           last.map((line) => (
             <div
               key={line.seq}
-              className={`w-full px-3.5 whitespace-pre-wrap wrap-break-word hover:bg-terminal-sel ${logTone(severity(line.text))}`}
+              className={`w-full px-3.5 whitespace-pre-wrap wrap-break-word hover:bg-terminal-sel ${logTone(levels.get(line.seq) ?? "")}`}
             >
               <LogText text={line.text} />
             </div>

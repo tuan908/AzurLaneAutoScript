@@ -13,7 +13,7 @@ import { Button } from "@/shared/ui/button";
 import { Icon } from "@/shared/ui/icon";
 
 import { LogText } from "./log-highlight";
-import { logTone, severity } from "./log-severity";
+import { lineSeverities, logTone } from "./log-severity";
 import { useLogs } from "./log-store";
 import { LOG_LEVELS, type LogsSearch } from "./search";
 
@@ -45,16 +45,17 @@ export function Logs() {
   const [follow, setFollow] = useState(true);
   const [pausedAfter, setPausedAfter] = useState(0);
   const scrollRegion = useRef<HTMLDivElement>(null);
+  const levels = useMemo(() => lineSeverities(lines), [lines]);
   const filteredLines = useMemo(() => {
     const searchText = filter.trim().toLowerCase();
     return lines.filter((line) => {
       if (searchText && !line.text.toLowerCase().includes(searchText)) return false;
       if (level === "all") return true;
 
-      const lineLevel = severity(line.text);
+      const lineLevel = levels.get(line.seq) ?? "";
       return level === "error" ? lineLevel === "error" : lineLevel !== "";
     });
-  }, [lines, filter, level]);
+  }, [lines, levels, filter, level]);
   // oxlint-disable-next-line react/incompatible-library -- This component opts out of React Compiler and keeps the virtualizer local.
   const virtualLog = useVirtualizer({
     count: filteredLines.length,
@@ -166,7 +167,7 @@ export function Logs() {
               {virtualLog.getVirtualItems().map((item) => {
                 const line = filteredLines[item.index];
                 if (!line) return null;
-                const tone = logTone(severity(line.text));
+                const tone = logTone(levels.get(line.seq) ?? "");
                 return (
                   <div
                     key={item.key}

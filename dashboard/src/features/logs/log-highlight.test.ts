@@ -30,5 +30,6 @@ describe("LogText", () => {
   it("shows divider lines and unknown text unchanged", () => {
     expect(html("──────── OPPONENT 1 ────────")).toContain("text-[#da8fff]");
     expect(plain(html("plain text"))).toBe("plain text");
+    expect(html("GameStuckError: Wait too long")).toContain("font-bold text-[#ff6961]");
   });
 });

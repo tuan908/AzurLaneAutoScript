@@ -25,6 +25,8 @@ const TOKEN_CLASS = [
   "text-[#c8b3ff]", // numbers
 ];
 
+const EXCEPTION = /^[A-Za-z_.]*(?:Error|Exception|Takeover|Interrupt)\b:?/;
+
 const RULE = /^[\s─═━-]*[─═━]{4,}/;
 
 function message(text: string): ReactNode[] {
@@ -53,6 +55,8 @@ function message(text: string): ReactNode[] {
 
 export function LogText({ text }: { text: string }) {
   const prefix = PREFIX.exec(text);
+  if (!prefix && EXCEPTION.test(text))
+    return <span className="font-bold text-[#ff6961]">{text}</span>;
   if (!prefix) return <>{message(text)}</>;
   const [whole, indent = "", date = "", time1, level1, level2, gap = " ", time2] = prefix;
   const level = (level1 ?? level2 ?? "") as string;
