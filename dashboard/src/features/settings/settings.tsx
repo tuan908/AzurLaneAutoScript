@@ -184,7 +184,7 @@ export function Settings() {
           onTask={goTask}
         />
 
-        <section className="flex min-w-0 max-w-240 flex-col gap-4">
+        <section className="@container flex min-w-0 flex-col gap-4">
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
             <h2 className="text-lg">
               {hits
@@ -262,7 +262,9 @@ export function Settings() {
             </>
           ) : (
             <>
-              {mainGroups.map(renderGroup)}
+              <div className="flex flex-col gap-4 @min-[72rem]:block @min-[72rem]:columns-2 @min-[72rem]:gap-4 @min-[72rem]:[&>*]:mb-4 @min-[72rem]:[&>*]:break-inside-avoid">
+                {mainGroups.map(renderGroup)}
+              </div>
               {advancedGroups.length > 0 && (
                 <Collapsible
                   key={current?.id}
@@ -280,7 +282,10 @@ export function Settings() {
                       </span>
                     )}
                   </CollapsibleTrigger>
-                  <CollapsiblePanel hiddenUntilFound className="flex flex-col gap-4">
+                  <CollapsiblePanel
+                    hiddenUntilFound
+                    className="flex flex-col gap-4 @min-[72rem]:block @min-[72rem]:columns-2 @min-[72rem]:gap-4 @min-[72rem]:[&>*]:mb-4 @min-[72rem]:[&>*]:break-inside-avoid"
+                  >
                     {advancedGroups.map(renderGroup)}
                   </CollapsiblePanel>
                 </Collapsible>

@@ -120,7 +120,7 @@ export function SettingField({
     String(field.default);
   return (
     <div
-      className={`-mx-4.5 grid grid-cols-1 gap-x-6 gap-y-1.5 border-t border-edge px-4.5 py-3 first-of-type:border-t-0 min-[981px]:grid-cols-[minmax(0,1fr)_18rem] [&>label]:flex [&>label]:flex-col [&>label]:gap-0.5 [&>label]:text-[13px] [&>label]:font-semibold ${error ? "bg-bad-soft/70 shadow-[inset_3px_0_0_var(--bad)]" : edited ? "bg-warn-soft/70 shadow-[inset_3px_0_0_var(--warn)]" : ""}`}
+      className={`-mx-4.5 grid grid-cols-1 gap-x-6 gap-y-1.5 border-t border-edge px-4.5 py-3 first-of-type:border-t-0 min-[981px]:grid-cols-[minmax(0,1fr)_minmax(16rem,40%)] [&>label]:flex [&>label]:flex-col [&>label]:gap-0.5 [&>label]:text-[13px] [&>label]:font-semibold ${error ? "bg-bad-soft/70 shadow-[inset_3px_0_0_var(--bad)]" : edited ? "bg-warn-soft/70 shadow-[inset_3px_0_0_var(--warn)]" : ""}`}
     >
       <label htmlFor={id} title={showKey ? undefined : field.path}>
         <span className="inline-flex flex-wrap items-center gap-x-2">
