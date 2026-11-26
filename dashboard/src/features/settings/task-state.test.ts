@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import type { ConfigField, ConfigTask } from "@/api/client";
 
-import { formatNextRun, headerPaths, isChanged, parseNextRun, schedulerOf } from "./task-state";
+import {
+  formatNextRun,
+  headerPaths,
+  isChanged,
+  matchField,
+  parseNextRun,
+  schedulerOf,
+  slotsOf,
+} from "./task-state";
 
 const field = (over: Partial<ConfigField>): ConfigField => ({
   path: "Exercise.Exercise.Mode",
@@ -60,5 +68,31 @@ describe("task state", () => {
     expect(t).not.toBeNull();
     expect(formatNextRun(t ?? 0)).toBe("2026-11-26 21:05:09");
     expect(parseNextRun("nope")).toBeNull();
+  });
+});
+
+const t = (id: string): ConfigTask => ({ id, name: id, help: "", groups: [] });
+
+describe("slots and search", () => {
+  const tasks = ["Main", "Main2", "Main3", "GemsFarming", "EventA", "EventB"].map(t);
+
+  it("links numbered slots to their base task", () => {
+    expect(slotsOf(tasks[0]!, tasks)?.slots.map((s) => s.id)).toEqual(["Main2", "Main3"]);
+    expect(slotsOf(tasks[2]!, tasks)).toMatchObject({ isSlot: true, root: { id: "Main" } });
+    expect(slotsOf(tasks[3]!, tasks)).toBeNull();
+    expect(slotsOf(tasks[4]!, tasks)).toBeNull();
+  });
+
+  it("ranks label and key matches above help and option matches", () => {
+    const f = field({
+      label: "Screenshot Method",
+      help: "auto-select benchmark",
+      options: [{ value: "nemu_ipc", label: "nemu_ipc" }],
+    });
+    expect(matchField(f, "screenshot")).toBe("strong");
+    expect(matchField(f, "mode")).toBe("strong");
+    expect(matchField(f, "benchmark")).toBe("weak");
+    expect(matchField(f, "nemu")).toBe("weak");
+    expect(matchField(f, "zzz")).toBeNull();
   });
 });

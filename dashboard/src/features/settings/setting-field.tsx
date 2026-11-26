@@ -6,6 +6,7 @@ import type { ConfigField, ConfigValue } from "@/api/client";
 import { Button } from "@/shared/ui/button";
 import { Select } from "@/shared/ui/select";
 
+import { Highlight } from "./highlight";
 import { SettingHelp } from "./setting-help";
 
 /** "2020-01-01 00:00:00" <-> datetime-local "2020-01-01T00:00:00" */
@@ -18,6 +19,7 @@ export function SettingField({
   edited,
   changed,
   showKey,
+  highlight = "",
   disabled,
   error,
   onChange,
@@ -27,6 +29,7 @@ export function SettingField({
   edited: boolean;
   changed: boolean;
   showKey: boolean;
+  highlight?: string;
   disabled: boolean;
   error: string | undefined;
   onChange: (v: ConfigValue) => void;
@@ -121,7 +124,7 @@ export function SettingField({
     >
       <label htmlFor={id} title={showKey ? undefined : field.path}>
         <span className="inline-flex flex-wrap items-center gap-x-2">
-          {field.label}
+          <Highlight text={field.label} query={highlight} />
           {changed && (
             <span
               className="inline-flex items-center gap-1 text-[11px] font-medium text-accent before:size-1.5 before:rounded-full before:bg-accent"
@@ -145,7 +148,7 @@ export function SettingField({
         </span>
         {showKey && (
           <span className="wrap-anywhere font-code text-[11px] leading-[1.4] font-normal text-subtle">
-            {field.path}
+            <Highlight text={field.path} query={highlight} />
           </span>
         )}
       </label>

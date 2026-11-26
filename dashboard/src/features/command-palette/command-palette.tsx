@@ -28,7 +28,7 @@ import { TAB_LABELS, TABS, TabSchema, useDashboardRoute } from "../instances/nav
 import { useInstances } from "../instances/queries";
 import { healthTone } from "../instances/status";
 import { useInstanceCommand } from "../instances/use-instance-command";
-import { readLang } from "../settings/lang";
+import { useLang } from "../settings/lang";
 import { configSchemaQuery } from "../settings/queries";
 
 const itemClass =
@@ -43,8 +43,9 @@ export function CommandPalette({ theme, onTheme }: { theme: Theme; onTheme: (t: 
   const navigate = useNavigate();
   const instances = useInstances().data ?? [];
   const current = instances.find((i) => i.id === instanceId);
+  const lang = useLang();
   const schema = useQuery({
-    ...configSchemaQuery(current?.id ?? "", readLang()),
+    ...configSchemaQuery(current?.id ?? "", lang),
     enabled: open && current !== undefined,
   });
   const settingTasks =

@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import * as z from "zod";
 
 export const LANGS = ["en-US", "zh-CN", "zh-TW", "ja-JP"] as const;
@@ -13,12 +14,26 @@ export function readLang(): Lang {
   }
 }
 
+let currentLang: Lang | null = null;
+const listeners = new Set<() => void>();
+
 export function saveLang(lang: Lang) {
+  currentLang = lang;
+  for (const listener of listeners) listener();
   try {
     localStorage.setItem(LANG_KEY, lang);
   } catch {
     // Not remembered when storage is unavailable.
   }
+}
+
+const getLang = () => (currentLang ??= readLang());
+
+export function useLang() {
+  return useSyncExternalStore((listener) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }, getLang);
 }
 
 const KEYS_KEY = "alas.settings.showKeys";

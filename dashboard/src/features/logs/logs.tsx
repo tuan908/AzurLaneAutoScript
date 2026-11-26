@@ -42,6 +42,7 @@ export function Logs() {
     });
   };
   const [follow, setFollow] = useState(true);
+  const [pausedAfter, setPausedAfter] = useState(0);
   const scrollRegion = useRef<HTMLDivElement>(null);
   const filteredLines = useMemo(() => {
     const searchText = filter.trim().toLowerCase();
@@ -69,6 +70,23 @@ export function Logs() {
     }
   }, [filteredLines, follow, virtualLog]);
 
+  const pause = (paused: boolean) => {
+    if (paused === !follow) return;
+    setFollow(!paused);
+    if (paused) setPausedAfter(filteredLines.at(-1)?.seq ?? 0);
+  };
+  const newLines = follow ? 0 : filteredLines.filter((line) => line.seq > pausedAfter).length;
+  const onScroll = () => {
+    const region = scrollRegion.current;
+    if (!region) return;
+    const fromBottom = region.scrollHeight - region.scrollTop - region.clientHeight;
+    pause(fromBottom > 48);
+  };
+  const jumpToLatest = () => {
+    pause(false);
+    if (filteredLines.length) virtualLog.scrollToIndex(filteredLines.length - 1, { align: "end" });
+  };
+
   const download = () => {
     const content = filteredLines.map((line) => line.text).join("\n");
     const downloadUrl = URL.createObjectURL(new Blob([content], { type: "text/plain" }));
@@ -84,8 +102,10 @@ export function Logs() {
       data-fill-height
       className="flex min-h-0 flex-col overflow-hidden min-[861px]:flex-1 rounded-alas border border-edge bg-terminal shadow-alas"
     >
-      <div className="flex flex-wrap items-center gap-2 border-b border-[#1d2330] bg-[#121620] px-2.5 py-2 text-terminal-dim [&_input:not([type=checkbox])]:w-55 [&_input:not([type=checkbox])]:min-h-7 [&_input:not([type=checkbox])]:border-[#262d3b] [&_input:not([type=checkbox])]:bg-[#0b0e14] [&_input:not([type=checkbox])]:text-[12.5px] [&_input:not([type=checkbox])]:text-terminal-text [&_label]:inline-flex [&_label]:items-center [&_label]:gap-1.5 [&_label]:text-xs max-[600px]:[&_input:not([type=checkbox])]:w-full">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[#1d2330] bg-[#121620] px-2.5 py-2 text-terminal-dim [&_input:not([type=checkbox])]:min-h-7 [&_input:not([type=checkbox])]:border-[#262d3b] [&_input:not([type=checkbox])]:bg-[#0b0e14] [&_input:not([type=checkbox])]:text-[12.5px] [&_input:not([type=checkbox])]:text-terminal-text [&_label]:inline-flex [&_label]:items-center [&_label]:gap-1.5 [&_label]:text-xs">
         <Input
+          className="min-w-40 flex-1 max-[600px]:basis-full"
+          type="search"
           aria-label="Filter logs"
           placeholder="Filter…"
           value={filter}
@@ -109,7 +129,7 @@ export function Logs() {
             id="follow-logs"
             aria-label="Follow logs"
             checked={follow}
-            onCheckedChange={(next) => setFollow(next === true)}
+            onCheckedChange={(next) => (next === true ? jumpToLatest() : pause(true))}
           >
             <CheckboxIndicator />
           </Checkbox>
@@ -119,40 +139,54 @@ export function Logs() {
           <Icon name="download" />
           Export
         </Button>
-        <span className="ml-auto text-xs tabular-nums">
+        <span className="text-xs tabular-nums">
           {filteredLines.length.toLocaleString()} / {lines.length.toLocaleString()} lines
         </span>
       </div>
-      <div
-        className="relative overflow-auto py-2 font-code text-xs leading-relaxed text-terminal-text focus-visible:-outline-offset-2 h-[70vh] min-h-90 min-[861px]:h-auto min-[861px]:flex-1"
-        ref={scrollRegion}
-        role="region"
-        aria-label="Recent log lines"
-        tabIndex={0}
-      >
-        {filteredLines.length === 0 ? (
-          <div className="px-3.5 py-6 text-terminal-dim">
-            {lines.length ? "No line matches the filter." : "No log lines yet."}
-          </div>
-        ) : (
-          <div className="relative w-full" style={{ height: virtualLog.getTotalSize() }}>
-            {virtualLog.getVirtualItems().map((item) => {
-              const line = filteredLines[item.index];
-              if (!line) return null;
-              const tone = logTone(severity(line.text));
-              return (
-                <div
-                  key={item.key}
-                  ref={virtualLog.measureElement}
-                  data-index={item.index}
-                  className={`absolute top-0 left-0 w-full px-3.5 whitespace-pre-wrap wrap-break-word hover:bg-terminal-sel ${tone}`}
-                  style={{ transform: `translateY(${item.start}px)` }}
-                >
-                  {line.text}
-                </div>
-              );
-            })}
-          </div>
+      <div className="relative flex min-h-0 flex-col min-[861px]:flex-1">
+        <div
+          onScroll={onScroll}
+          className="relative overflow-auto py-2 font-code text-xs leading-relaxed text-terminal-text focus-visible:-outline-offset-2 h-[70vh] min-h-90 min-[861px]:h-auto min-[861px]:flex-1"
+          ref={scrollRegion}
+          role="region"
+          aria-label="Recent log lines"
+          tabIndex={0}
+        >
+          {filteredLines.length === 0 ? (
+            <div className="px-3.5 py-6 text-terminal-dim">
+              {lines.length ? "No line matches the filter." : "No log lines yet."}
+            </div>
+          ) : (
+            <div className="relative w-full" style={{ height: virtualLog.getTotalSize() }}>
+              {virtualLog.getVirtualItems().map((item) => {
+                const line = filteredLines[item.index];
+                if (!line) return null;
+                const tone = logTone(severity(line.text));
+                return (
+                  <div
+                    key={item.key}
+                    ref={virtualLog.measureElement}
+                    data-index={item.index}
+                    className={`absolute top-0 left-0 w-full px-3.5 whitespace-pre-wrap wrap-break-word hover:bg-terminal-sel ${tone}`}
+                    style={{ transform: `translateY(${item.start}px)` }}
+                  >
+                    {line.text}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        {!follow && (
+          <Button
+            size="small"
+            variant="primary"
+            className="absolute right-5 bottom-3 shadow-alas-lg"
+            onClick={jumpToLatest}
+          >
+            <Icon name="download" />
+            {newLines > 0 ? `Jump to latest (${newLines.toLocaleString()} new)` : "Jump to latest"}
+          </Button>
         )}
       </div>
     </section>

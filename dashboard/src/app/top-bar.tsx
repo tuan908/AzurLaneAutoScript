@@ -4,8 +4,10 @@ import { CommandPalette } from "@/features/command-palette/command-palette";
 import { healthQuery } from "@/features/health/queries";
 import { formatDuration } from "@/features/instances/status";
 import { useConnection, useConnectionError } from "@/features/live-updates/events";
+import { LANGS, LangSchema, saveLang, useLang } from "@/features/settings/lang";
 import type { Theme } from "@/shared/theme";
 import { Chip } from "@/shared/ui/chip";
+import { Select } from "@/shared/ui/select";
 
 import { Brand } from "./brand";
 import { ThemeSwitch } from "./theme-switch";
@@ -18,6 +20,7 @@ export function TopBar({ theme, onTheme }: { theme: Theme; onTheme: (t: Theme) =
   const connectionError = useConnectionError();
   const health = useQuery(healthQuery());
   const h = health.data;
+  const lang = useLang();
   const overall = h?.health?.status;
   return (
     <header className="col-span-full flex min-h-13 flex-wrap items-center gap-4 border-b border-edge bg-panel px-4 py-2.5 max-[600px]:p-3">
@@ -65,6 +68,16 @@ export function TopBar({ theme, onTheme }: { theme: Theme; onTheme: (t: Theme) =
           </>
         )}
         {h?.logQueueManagerAlive === false && <Chip className="text-bad">Log queue down</Chip>}
+        <Select
+          className="min-h-7! w-24! min-w-0! rounded-full! bg-panel-2! text-xs!"
+          label="Settings language"
+          items={LANGS}
+          value={lang}
+          onValueChange={(next) => {
+            const parsed = LangSchema.safeParse(next);
+            if (parsed.success) saveLang(parsed.data);
+          }}
+        />
         <ThemeSwitch theme={theme} onTheme={onTheme} />
       </div>
     </header>

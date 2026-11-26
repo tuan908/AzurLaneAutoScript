@@ -12,37 +12,34 @@ import { useState } from "react";
 
 import type { ConfigSchema, ConfigTask } from "@/api/client";
 import { SectionLabel } from "@/shared/ui/section-label";
-import { Select } from "@/shared/ui/select";
-
-import { LANGS, LangSchema, type Lang } from "./lang";
 
 export function SettingsNav({
   menus,
   currentTaskId,
   searching,
   enabledOf,
+  outline,
+  activeGroup,
   search,
   onSearch,
   changedOnly,
   onChangedOnly,
   showKeys,
   onShowKeys,
-  lang,
-  onLang,
   onTask,
 }: {
   menus: ConfigSchema["menus"];
   currentTaskId: string | undefined;
   searching: boolean;
   enabledOf: (task: ConfigTask) => boolean | null;
+  outline: { id: string; name: string }[];
+  activeGroup: string | null;
   search: string;
   onSearch: (next: string) => void;
   changedOnly: boolean;
   onChangedOnly: (next: boolean) => void;
   showKeys: boolean;
   onShowKeys: (next: boolean) => void;
-  lang: Lang;
-  onLang: (next: Lang) => void;
   onTask: (taskId: string) => void;
 }) {
   const currentMenu = menus.find((m) => m.tasks.some((t) => t.id === currentTaskId))?.id;
@@ -77,19 +74,6 @@ export function SettingsNav({
           Show keys
         </label>
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <SectionLabel>Language</SectionLabel>
-        <Select
-          className="min-h-7.5! w-28! min-w-0! text-[12.5px]!"
-          label="Settings language"
-          items={LANGS}
-          value={lang}
-          onValueChange={(next) => {
-            const parsed = LangSchema.safeParse(next);
-            if (parsed.success) onLang(parsed.data);
-          }}
-        />
-      </div>
       <Accordion
         multiple
         value={openMenus}
@@ -121,17 +105,41 @@ export function SettingsNav({
               </AccordionHeader>
               <AccordionPanel className="pb-1">
                 {menu.tasks.map((task) => (
-                  <SdkButton
-                    key={task.id}
-                    className="block! h-auto! w-full rounded-alas-sm! border-0! bg-transparent! px-2.5 py-1.5 text-left text-[13px] leading-snug whitespace-normal! text-secondary hover:bg-panel-3! hover:text-ink aria-[current=true]:bg-accent-soft! aria-[current=true]:font-semibold aria-[current=true]:text-accent!"
-                    aria-current={currentTaskId === task.id && !searching ? "true" : undefined}
-                    onClick={() => onTask(task.id)}
-                  >
-                    <span className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1">{task.name}</span>
-                      <TaskDot enabled={enabledOf(task)} />
-                    </span>
-                  </SdkButton>
+                  <div key={task.id}>
+                    <SdkButton
+                      className="block! h-auto! w-full rounded-alas-sm! border-0! bg-transparent! px-2.5 py-1.5 text-left text-[13px] leading-snug whitespace-normal! text-secondary hover:bg-panel-3! hover:text-ink aria-[current=true]:bg-accent-soft! aria-[current=true]:font-semibold aria-[current=true]:text-accent!"
+                      aria-current={currentTaskId === task.id && !searching ? "true" : undefined}
+                      onClick={() => onTask(task.id)}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1">{task.name}</span>
+                        <TaskDot enabled={enabledOf(task)} />
+                      </span>
+                    </SdkButton>
+                    {task.id === currentTaskId && !searching && outline.length > 2 && (
+                      <ol className="my-1 ml-3.5 flex list-none flex-col border-l border-edge p-0">
+                        {outline.map((group) => (
+                          <li key={group.id}>
+                            <a
+                              href={`#group-${group.id}`}
+                              aria-current={activeGroup === group.id ? "location" : undefined}
+                              className="-ml-px block border-l-2 border-transparent py-1 pr-2 pl-3 text-xs text-subtle no-underline hover:text-ink aria-[current=location]:border-accent aria-[current=location]:font-semibold aria-[current=location]:text-ink"
+                              onClick={(event) => {
+                                // The URL hash belongs to the router.
+                                event.preventDefault();
+                                document
+                                  .getElementById(`group-${group.id}`)
+                                  ?.closest("section")
+                                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                              }}
+                            >
+                              {group.name}
+                            </a>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </div>
                 ))}
               </AccordionPanel>
             </AccordionItem>
