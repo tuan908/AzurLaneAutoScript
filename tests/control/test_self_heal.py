@@ -135,3 +135,27 @@ def test_unknown_page_counter_resets_after_success(alas):
     script_alas = make([("Commission", unknown()), ("Dorm", None), ("Commission", unknown()), ("Dorm", None)])
     loop_until_done(script_alas)
     assert log.count(("call", "Restart")) == 2
+
+
+def test_restart_failing_three_times_exits_to_retry_later(alas):
+    alas_module, make, log = alas
+    stuck = alas_module.GameTooManyClickError("Too many click for a button: LOGIN_CHECK")
+    script_alas = make([("Restart", stuck)] * 3)
+    with pytest.raises(SystemExit) as stop:
+        loop_until_done(script_alas)
+    assert stop.value.code == alas_module.RETRY_LATER_EXIT_CODE
+
+
+def test_login_takeover_exits_to_retry_later(alas):
+    alas_module, make, log = alas
+    code = compile("def login_fails():\n    raise RequestHumanTakeover\n", "module/handler/login.py", "exec")
+    scope = {"RequestHumanTakeover": alas_module.RequestHumanTakeover}
+    exec(code, scope)
+    try:
+        scope["login_fails"]()
+    except alas_module.RequestHumanTakeover as error:
+        login_error = error
+    script_alas = make([("Restart", login_error)])
+    with pytest.raises(SystemExit) as stop:
+        loop_until_done(script_alas)
+    assert stop.value.code == alas_module.RETRY_LATER_EXIT_CODE

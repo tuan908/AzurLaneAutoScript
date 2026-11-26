@@ -9,7 +9,7 @@ from module.control.api import API_PREFIX, API_VERSION, ControlApi
 
 
 InstanceState = Literal["stopped", "starting", "running", "stopping", "failed"]
-HealthState = Literal["ok", "idle", "stopped", "stalled", "crashed", "human_takeover", "unmanaged"]
+HealthState = Literal["ok", "idle", "stopped", "stalled", "crashed", "human_takeover", "waiting_retry", "unmanaged"]
 FieldKind = Literal["input", "select", "checkbox", "datetime", "textarea", "storage", "lock", "state"]
 
 

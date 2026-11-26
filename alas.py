@@ -22,14 +22,19 @@ TASK_COOLDOWN_MINUTES = 180
 MAX_POSTPONES_PER_HOUR = 3
 # Code under these folders talks to the emulator or logs in: its takeovers affect every task.
 GLOBAL_TAKEOVER_PATHS = ('module/device/', 'module/handler/login', 'module/daemon/')
+LOGIN_PATHS = ('module/handler/login',)
+
+
+def raised_under(error, paths):
+    for frame in traceback.extract_tb(error.__traceback__):
+        path = frame.filename.replace('\\', '/')
+        if any(part in path for part in paths):
+            return True
+    return False
 
 
 def is_global_takeover(error):
-    for frame in traceback.extract_tb(error.__traceback__):
-        path = frame.filename.replace('\\', '/')
-        if any(part in path for part in GLOBAL_TAKEOVER_PATHS):
-            return True
-    return False
+    return raised_under(error, GLOBAL_TAKEOVER_PATHS)
 
 
 class AzurLaneAutoScript:
@@ -146,6 +151,8 @@ class AzurLaneAutoScript:
             )
             exit(1)
         except RequestHumanTakeover as e:
+            if raised_under(e, LOGIN_PATHS):
+                self.exit_retry_later('The game could not log in')
             if command != 'restart' and not is_global_takeover(e):
                 self.postpone_reason = 'needs your attention, see the messages above'
                 return False
@@ -189,6 +196,16 @@ class AzurLaneAutoScript:
         del_cached_property(self, 'config')
         self.checker.check_now()
         return True
+
+    def exit_retry_later(self, reason):
+        logger.critical(f'{reason}, the server may be under maintenance or the game needs an update')
+        logger.critical('Stopping; the control server will start Alas again later to check')
+        handle_notify(
+            self.config.Error_OnePushConfig,
+            title=f"Alas <{self.config_name}> waiting for the game",
+            content=f"<{self.config_name}> {reason}. Alas will check again later.",
+        )
+        exit(RETRY_LATER_EXIT_CODE)
 
     def save_error_log(self):
         """
@@ -663,6 +680,8 @@ class AzurLaneAutoScript:
                 if self.postpone_task(task, reason):
                     continue
                 failed = max(failed, 3)
+            if failed >= 3 and task == 'Restart':
+                self.exit_retry_later('Restarting the game failed 3 times')
             if failed >= 3:
                 logger.critical(f"Task `{task}` failed 3 or more times.")
                 logger.critical("Possible reason #1: You haven't used it correctly. "

@@ -484,6 +484,7 @@
               "stalled",
               "crashed",
               "human_takeover",
+              "waiting_retry",
               "unmanaged"
             ],
             "title": "State",

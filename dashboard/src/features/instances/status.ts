@@ -37,6 +37,7 @@ export function healthTone(s: InstanceStatus): { tone: Tone; label: string } {
   if (s.unmanaged) return { tone: "warn", label: "External" };
   if (h?.state === "human_takeover") return { tone: "bad", label: "Needs you" };
   if (h?.recovery?.gaveUp) return { tone: "bad", label: "Gave up" };
+  if (h?.state === "waiting_retry") return { tone: "warn", label: "Waiting for game" };
   if (s.state === "failed" || h?.state === "crashed") return { tone: "bad", label: "Failed" };
   if (h?.state === "stalled") return { tone: "warn", label: "Stalled" };
   if (s.state === "starting") return { tone: "warn", label: "Starting" };

@@ -417,7 +417,7 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "ok" | "idle" | "stopped" | "stalled" | "crashed" | "human_takeover" | "unmanaged";
+            state: "ok" | "idle" | "stopped" | "stalled" | "crashed" | "human_takeover" | "waiting_retry" | "unmanaged";
         };
         /** InstancePolicy */
         InstancePolicy: {

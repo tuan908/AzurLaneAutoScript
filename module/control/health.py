@@ -4,6 +4,7 @@ Health checks and bounded recovery of Alas instances, running in the web server 
 Signals (per instance), from the worker process the server owns and its log:
 - crashed        the worker exited on its own with an error
 - human_takeover the worker stopped on RequestHumanTakeover: it needs a person, never restarted
+- waiting_retry  the game could not log in (maintenance, update): woken every WAKE_MINUTES to check
 - stalled        a task is running but the worker has logged nothing for `stallMinutes`
 - idle           the worker runs and waits for its next task (healthy)
 - ok / stopped   healthy
@@ -23,7 +24,7 @@ import time
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional
 
-from module.exception import HUMAN_TAKEOVER_EXIT_CODE
+from module.exception import HUMAN_TAKEOVER_EXIT_CODE, RETRY_LATER_EXIT_CODE
 from module.logger import logger
 
 POLICY_FILE = "./config/control.yaml"
@@ -37,6 +38,10 @@ HUMAN_TAKEOVER_MARKERS = ("Request human takeover", "RequestHumanTakeover")
 HISTORY_LENGTH = 200
 # Restart counters reset after the worker ran this long without needing recovery
 HEALTHY_RESET_SECONDS = 600
+# Maintenance lasts hours: wake a worker that could not log in this often, for this long.
+WAKE_MINUTES = 60
+WAKE_FOR_HOURS = 24
+WAKE_RESET_SECONDS = 1800
 
 
 def _iso(ts: Optional[float]) -> Optional[str]:
@@ -150,6 +155,8 @@ class _Recovery:
         self.pending_reason: Optional[str] = None
         self.gave_up_at: Optional[float] = None
         self.last_restart_at: Optional[float] = None
+        self.waiting_since: Optional[float] = None  # first login failure of this wait
+        self.wake_at: Optional[float] = None
 
 
 class HealthMonitor:
@@ -224,6 +231,8 @@ class HealthMonitor:
         if state in ("starting", "stopping"):
             return {"state": "ok", "detail": state}
         if state == "failed":
+            if status.get("exitCode") == RETRY_LATER_EXIT_CODE:
+                return {"state": "waiting_retry", "detail": "The game could not log in (maintenance or an update)"}
             if status.get("exitCode") == HUMAN_TAKEOVER_EXIT_CODE:
                 return {"state": "human_takeover", "detail": "Alas requested human takeover, see the log"}
             if status.get("logDraining"):
@@ -268,6 +277,16 @@ class HealthMonitor:
                     rec.consecutive = 0
                     rec.last_restart_at = None
 
+                # A woken worker fails its login within minutes; only a longer healthy run ends the wait
+                if (health["state"] in ("ok", "idle") and rec.waiting_since is not None
+                        and started and now - started > WAKE_RESET_SECONDS):
+                    rec.waiting_since = None
+                wake = False
+                if health["state"] == "waiting_retry" and instance_policy["autoRestart"] and rec.gave_up_at is None:
+                    wake = self._plan_wake(iid, status, rec, now)
+                else:
+                    rec.wake_at = None
+
                 wants = None
                 if health["state"] == "crashed" and instance_policy["autoRestart"]:
                     wants = "crashed"
@@ -277,6 +296,10 @@ class HealthMonitor:
                     rec.next_attempt_at = None
                     rec.pending_reason = None
 
+            if wake and not self._stop.is_set() and self.log_queue_alive() is not False:
+                restarted = self._wake(status, rec)
+                if restarted is not None:
+                    health = self._classify(restarted, instance_policy, now)
             if wants is not None and rec.gave_up_at is None and self.log_queue_alive() is not False:
                 restarted = self._maybe_restart(status, wants, health, rec, now, max_restarts, backoff)
                 if restarted is not None:
@@ -330,13 +353,43 @@ class HealthMonitor:
                      f"attempt {len(rec.restarts)}/{max_restarts}" + ("" if ok else f": {error}"))
         return result
 
+    def _plan_wake(self, iid: str, status: dict, rec: _Recovery, now: float) -> bool:
+        """Called under the lock. Returns: if the worker should be started now"""
+        stopped = _parse_iso(status.get("stoppedAt")) or now
+        if rec.waiting_since is None:
+            rec.waiting_since = stopped
+        if rec.wake_at is None:
+            if now - rec.waiting_since > WAKE_FOR_HOURS * 3600:
+                rec.gave_up_at = now
+                self._record(iid, "gave_up", "waiting_retry",
+                             f"the game could not log in for {WAKE_FOR_HOURS} hours, start it manually")
+                return False
+            rec.wake_at = stopped + WAKE_MINUTES * 60
+            self._record(iid, "scheduled", "waiting_retry", f"check again at {_iso(rec.wake_at)}")
+        return rec.wake_at <= now
+
+    def _wake(self, status: dict, rec: _Recovery) -> Optional[dict]:
+        iid = status["id"]
+        try:
+            result = self.service.recover(status, "waiting_retry")
+        except Exception as e:
+            result, error = None, str(e)
+        else:
+            error = (result or {}).get("lastError")
+        with self._lock:
+            rec.wake_at = None
+        ok = result is not None and result.get("state") in ("starting", "running")
+        self._record(iid, "restarted" if ok else "restart_failed", "waiting_retry",
+                     "checking if the game can log in" + ("" if ok else f": {error}"))
+        return result
+
     @staticmethod
     def _recovery_view(rec: _Recovery, instance_policy: dict) -> dict:
         return {
             "policy": instance_policy,
             "restartsLastHour": len(rec.restarts),
-            "nextAttemptAt": _iso(rec.next_attempt_at),
-            "pendingReason": rec.pending_reason,
+            "nextAttemptAt": _iso(rec.next_attempt_at if rec.wake_at is None else rec.wake_at),
+            "pendingReason": rec.pending_reason if rec.wake_at is None else "waiting_retry",
             "gaveUp": rec.gave_up_at is not None,
         }
 
@@ -368,7 +421,7 @@ class HealthMonitor:
             for iid, health in sorted(self._health.items()):
                 state = health["state"]
                 status = ("fail" if state in ("crashed", "human_takeover") or health["recovery"]["gaveUp"]
-                          else "warn" if state in ("stalled", "unmanaged") else "ok")
+                          else "warn" if state in ("stalled", "unmanaged", "waiting_retry") else "ok")
                 checks.append({"name": f"instance:{iid}", "status": status,
                                "detail": f"{state}{': ' + health['detail'] if health['detail'] else ''}"})
         overall = ("fail" if any(c["status"] == "fail" for c in checks)

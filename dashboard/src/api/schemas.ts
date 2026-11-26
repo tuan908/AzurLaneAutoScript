@@ -15,6 +15,7 @@ export const HEALTH_STATES = [
   "stalled",
   "crashed",
   "human_takeover",
+  "waiting_retry",
   "unmanaged",
 ] as const;
 export const CHECK_STATUSES = ["ok", "warn", "fail"] as const;

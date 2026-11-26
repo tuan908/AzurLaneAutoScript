@@ -52,6 +52,14 @@ export function WorkspaceBanners({
       body: "Too many restarts within an hour. Start it manually once the cause is fixed.",
       links: [toLogs, toHealth],
     });
+  else if (h?.state === "waiting_retry")
+    items.push({
+      tone: "warn",
+      title: "Waiting for the game",
+      body: `The game could not log in, probably maintenance or an update. ${nextRetry ? `Alas checks again ${untilNextRun(nextRetry, now)}.` : "Turn on automatic restart to check again hourly."}`,
+      links: [toLogs],
+      announce: false,
+    });
   else if (h && nextRetry)
     items.push({
       tone: "warn",

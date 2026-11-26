@@ -347,3 +347,69 @@ def test_http_recovery_endpoints(env):
     bad = client.patch("/api/v1/recovery/policy", json={"maxRestartsPerHour": "many"})
     assert bad.status_code == 400
     assert client.patch("/api/v1/recovery/policy", data="{}").status_code == 415
+
+
+def fail_login(service, clock):
+    from module.exception import RETRY_LATER_EXIT_CODE
+
+    service.set("alas", "failed")
+    service.statuses["alas"]["exitCode"] = RETRY_LATER_EXIT_CODE
+    service.statuses["alas"]["stoppedAt"] = iso(clock())
+
+
+def test_login_failure_wakes_the_worker_hourly(env):
+    from module.control.health import WAKE_MINUTES
+
+    clock, service, policy, monitor = env
+    fail_login(service, clock)
+    monitor.tick()
+    assert health(monitor)["state"] == "waiting_retry"
+    assert health(monitor)["recovery"]["pendingReason"] == "waiting_retry"
+    clock.now += WAKE_MINUTES * 60 - 10
+    monitor.tick()
+    assert service.calls == []
+    clock.now += 20
+    monitor.tick()
+    assert service.calls == [("start", "alas")]
+    # Hourly wakes never use the crash restart budget
+    assert health(monitor)["recovery"]["restartsLastHour"] == 0
+
+
+def test_login_failure_gives_up_after_a_day(env):
+    from module.control.health import WAKE_FOR_HOURS, WAKE_MINUTES
+
+    clock, service, policy, monitor = env
+    for _ in range(WAKE_FOR_HOURS + 2):
+        fail_login(service, clock)
+        monitor.tick()
+        clock.now += WAKE_MINUTES * 60 + 1
+        monitor.tick()
+        clock.now += 120  # the woken worker fails its login again a few minutes later
+        monitor.tick()
+    assert health(monitor)["recovery"]["gaveUp"] is True
+    assert len(service.calls) == WAKE_FOR_HOURS - 1 or len(service.calls) == WAKE_FOR_HOURS
+
+
+def test_healthy_run_ends_the_wait(env):
+    from module.control.health import WAKE_MINUTES, WAKE_RESET_SECONDS
+
+    clock, service, policy, monitor = env
+    fail_login(service, clock)
+    monitor.tick()
+    clock.now += WAKE_MINUTES * 60 + 1
+    monitor.tick()
+    clock.now += WAKE_RESET_SECONDS + 1
+    monitor.tick()
+    assert monitor._recovery["alas"].waiting_since is None
+
+
+def test_no_wake_when_auto_restart_is_off(env):
+    from module.control.health import WAKE_MINUTES
+
+    clock, service, policy, monitor = env
+    policy.update({"instances": {"alas": {"autoRestart": False}}})
+    fail_login(service, clock)
+    monitor.tick()
+    clock.now += WAKE_MINUTES * 60 * 3
+    monitor.tick()
+    assert service.calls == []

@@ -62,6 +62,9 @@ class GamePageUnknownError(Exception):
 
 
 HUMAN_TAKEOVER_EXIT_CODE = 10
+# The game could not log in (maintenance, an update, the login screen stuck).
+# The control server starts the worker again later to check.
+RETRY_LATER_EXIT_CODE = 11
 
 
 class RequestHumanTakeover(Exception):

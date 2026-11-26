@@ -16,6 +16,7 @@ export const HEALTH_LABEL: Record<string, string> = {
   stalled: "stalled",
   crashed: "crashed",
   human_takeover: "needs you",
+  waiting_retry: "waiting for the game",
   unmanaged: "unmanaged",
 };
 
