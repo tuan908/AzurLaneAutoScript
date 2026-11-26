@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/shared/ui/button";
 import { Icon } from "@/shared/ui/icon";
 
+import { LogText } from "./log-highlight";
 import { logTone, severity } from "./log-severity";
 import { useLogs } from "./log-store";
 import { LOG_LEVELS, type LogsSearch } from "./search";
@@ -59,7 +60,7 @@ export function Logs() {
     count: filteredLines.length,
     getScrollElement: () => scrollRegion.current,
     getItemKey: (index) => filteredLines[index]?.seq ?? `missing-${index}`,
-    estimateSize: () => 18,
+    estimateSize: () => 22,
     overscan: 12,
     useFlushSync: false,
   });
@@ -150,7 +151,7 @@ export function Logs() {
       <div className="relative flex min-h-0 flex-col min-[861px]:flex-1">
         <div
           onScroll={onScroll}
-          className="relative overflow-auto py-2 font-code text-xs leading-relaxed text-terminal-text focus-visible:-outline-offset-2 h-[70vh] min-h-90 min-[861px]:h-auto min-[861px]:flex-1"
+          className="relative overflow-auto py-2 font-code text-[13.5px] leading-[1.6] text-terminal-text focus-visible:-outline-offset-2 h-[70vh] min-h-90 min-[861px]:h-auto min-[861px]:flex-1"
           ref={scrollRegion}
           role="region"
           aria-label="Recent log lines"
@@ -174,7 +175,7 @@ export function Logs() {
                     className={`absolute top-0 left-0 w-full px-3.5 whitespace-pre-wrap wrap-break-word hover:bg-terminal-sel ${tone}`}
                     style={{ transform: `translateY(${item.start}px)` }}
                   >
-                    {line.text}
+                    <LogText text={line.text} />
                   </div>
                 );
               })}
