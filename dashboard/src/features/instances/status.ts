@@ -61,6 +61,6 @@ export function statusLine(s: InstanceStatus, now: number): string {
     case "failed":
       return s.health?.detail || s.lastError || "Stopped on an error";
     default:
-      return s.stoppedAt ? `Stopped ${since(s.stoppedAt, now)} ago` : "Not started";
+      return s.stoppedAt ? `Stopped ${since(s.stoppedAt, now)} ago` : "Press Start to run tasks";
   }
 }

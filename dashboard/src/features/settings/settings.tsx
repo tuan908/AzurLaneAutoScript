@@ -10,6 +10,7 @@ import { QueryNotice } from "@/shared/ui/query-content";
 import { SectionLabel } from "@/shared/ui/section-label";
 
 import { readShowKeys, saveShowKeys, useLang } from "./lang";
+import { MenuOverview, menuAbout } from "./menu-overview";
 import { configSchemaQuery } from "./queries";
 import { SaveBar } from "./save-bar";
 import { SettingField } from "./setting-field";
@@ -30,7 +31,6 @@ import { useConfigEditor } from "./use-config-editor";
 const route = getRouteApi("/$instanceId/settings");
 const MAX_SEARCH_HITS = 200;
 const STACK = "flex flex-col gap-4";
-const COLUMNS = `${STACK} @min-[72rem]:block @min-[72rem]:columns-2 @min-[72rem]:gap-4 @min-[72rem]:[&>*]:mb-4 @min-[72rem]:[&>*]:break-inside-avoid`;
 
 type Hit = { task: ConfigTask; field: ConfigField };
 
@@ -57,7 +57,7 @@ function searchFields(
 
 export function Settings() {
   const { instanceId: id } = route.useParams();
-  const { q: search, task: taskId, changed: changedOnly } = route.useSearch();
+  const { q: search, task: taskId, menu: menuId, changed: changedOnly } = route.useSearch();
   const navigate = route.useNavigate();
   const lang = useLang();
   const [showKeys, setShowKeys] = useState(readShowKeys);
@@ -86,7 +86,12 @@ export function Settings() {
   }, [editor]);
 
   const tasks = useMemo(() => schema.data?.menus.flatMap((m) => m.tasks) ?? [], [schema.data]);
-  const current = tasks.find((t) => t.id === taskId) ?? tasks[0];
+  const menus = schema.data?.menus ?? [];
+  const current = taskId ? tasks.find((t) => t.id === taskId) : undefined;
+  const currentMenu =
+    (current && menus.find((m) => m.tasks.some((t) => t.id === current.id))) ??
+    menus.find((m) => m.id === menuId) ??
+    menus[0];
   const isDifferent = (field: ConfigField) =>
     field.path in edits || isChanged(field, editor.valueOf(field));
   const hits = searchFields(tasks, search, changedOnly, isDifferent);
@@ -123,10 +128,12 @@ export function Settings() {
     />
   );
   const renderGroup = (group: (typeof bodyGroups)[number]) => (
-    <Card key={group.id} className="scroll-mt-36 [&_h3]:mb-0.5">
+    <Card key={group.id} className="@container scroll-mt-36 [&_h3]:mb-0.5">
       <h3 id={`group-${group.id}`}>{group.name}</h3>
       {group.help && <SettingHelp className="mb-1.5" text={group.help} about={group.name} />}
-      {group.fields.map(renderField)}
+      <div className="mt-2 grid grid-cols-1 gap-x-8 @min-[56rem]:grid-cols-2">
+        {group.fields.map(renderField)}
+      </div>
     </Card>
   );
   const renderHits = (list: Hit[]) =>
@@ -151,7 +158,10 @@ export function Settings() {
     const scheduler = schedulerOf(task);
     return scheduler ? editor.valueOf(scheduler.enable) === true : null;
   };
-  const goTask = (next: string) => void navigate({ search: { q: "", task: next, changed: false } });
+  const goTask = (next: string) =>
+    void navigate({ search: { q: "", task: next, menu: "", changed: false } });
+  const goMenu = (next: string) =>
+    void navigate({ search: { q: "", task: "", menu: next, changed: false } });
 
   return (
     <>
@@ -159,6 +169,7 @@ export function Settings() {
       <div className="grid min-w-0 grid-cols-1 items-start gap-4 min-[981px]:grid-cols-[250px_minmax(0,1fr)]">
         <SettingsNav
           menus={schema.data.menus}
+          currentMenuId={currentMenu?.id}
           currentTaskId={current?.id}
           searching={hits !== null}
           enabledOf={enabledOf}
@@ -183,6 +194,7 @@ export function Settings() {
             setShowKeys(next);
             saveShowKeys(next);
           }}
+          onMenu={goMenu}
           onTask={goTask}
         />
 
@@ -191,7 +203,7 @@ export function Settings() {
             <h2 className="text-lg">
               {hits
                 ? `${hitCount}${hitCount >= MAX_SEARCH_HITS ? "+" : ""} ${changedOnly ? "changed" : "matching"} setting${hitCount === 1 ? "" : "s"}`
-                : current?.name}
+                : (current?.name ?? currentMenu?.name)}
             </h2>
             {!hits && current && (
               <span className="text-xs text-subtle">
@@ -206,6 +218,11 @@ export function Settings() {
               rev {doc.data.revision}
             </span>
           </div>
+          {!hits && !current && currentMenu && (
+            <p className="text-[13px] text-secondary">
+              {menuAbout(currentMenu)} Turn tasks on or off here, or open one to change how it runs.
+            </p>
+          )}
           {!hits && current?.help && <SettingHelp text={current.help} about={current.name} />}
           {!hits && slots && (
             <p className="text-xs text-subtle">
@@ -262,11 +279,21 @@ export function Settings() {
                 </Card>
               )}
             </>
+          ) : !current ? (
+            currentMenu && (
+              <MenuOverview
+                instanceId={id}
+                menu={currentMenu}
+                valueOf={editor.valueOf}
+                edited={(field) => field.path in edits}
+                disabled={editor.blocked || schema.isError}
+                onChange={editor.change}
+                onTask={goTask}
+              />
+            )
           ) : (
             <>
-              <div className={mainGroups.length > 1 ? COLUMNS : STACK}>
-                {mainGroups.map(renderGroup)}
-              </div>
+              <div className={STACK}>{mainGroups.map(renderGroup)}</div>
               {advancedGroups.length > 0 && (
                 <Collapsible
                   key={current?.id}
@@ -284,10 +311,7 @@ export function Settings() {
                       </span>
                     )}
                   </CollapsibleTrigger>
-                  <CollapsiblePanel
-                    hiddenUntilFound
-                    className={advancedGroups.length > 1 ? COLUMNS : STACK}
-                  >
+                  <CollapsiblePanel hiddenUntilFound className={STACK}>
                     {advancedGroups.map(renderGroup)}
                   </CollapsiblePanel>
                 </Collapsible>

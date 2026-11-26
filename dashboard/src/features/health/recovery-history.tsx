@@ -21,7 +21,11 @@ const actionTone = (action: string) => {
 export function RecoveryHistory({ instanceId }: { instanceId: string }) {
   const recovery = useQuery(recoveryQuery());
   return (
-    <Card heading="Recovery history" description="newest first, kept until the server restarts">
+    <Card
+      heading="Recovery history"
+      description="newest first, kept until the server restarts"
+      className="min-[861px]:flex-1"
+    >
       <QueryContent query={recovery} label="recovery history">
         {(data) => {
           const history = data.history.filter((entry) => entry.instanceId === instanceId);

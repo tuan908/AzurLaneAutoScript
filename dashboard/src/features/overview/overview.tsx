@@ -24,7 +24,7 @@ export function Overview() {
     <>
       <OverviewMetrics status={status} />
 
-      <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))]">
+      <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] min-[861px]:min-h-80 min-[861px]:flex-1">
         <Card
           heading="Up next"
           action={

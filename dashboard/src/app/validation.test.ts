@@ -10,7 +10,7 @@ import { ThemeSchema } from "@/shared/theme";
 describe("route search params", () => {
   it("fill in defaults for missing params", () => {
     expect(LogsSearchSchema.parse({})).toEqual({ filter: "", level: "all" });
-    expect(SettingsSearchSchema.parse({})).toEqual({ q: "", task: "", changed: false });
+    expect(SettingsSearchSchema.parse({})).toEqual({ q: "", task: "", menu: "", changed: false });
   });
 
   it("fall back instead of throwing on a hand-edited URL", () => {
@@ -21,6 +21,7 @@ describe("route search params", () => {
     expect(SettingsSearchSchema.parse({ q: ["a"], task: "Commission" })).toEqual({
       q: "",
       task: "Commission",
+      menu: "",
       changed: false,
     });
   });

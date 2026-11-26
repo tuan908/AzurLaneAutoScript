@@ -84,6 +84,6 @@ describe("statusLine", () => {
     expect(statusLine(make({ state: "failed", lastError: "Worker exited with code 1" }), 0)).toBe(
       "Worker exited with code 1",
     );
-    expect(statusLine(make({ state: "stopped" }), 0)).toBe("Not started");
+    expect(statusLine(make({ state: "stopped" }), 0)).toBe("Press Start to run tasks");
   });
 });

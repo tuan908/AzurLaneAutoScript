@@ -104,12 +104,19 @@ def instance_path(profile):
 def stop_control_server():
     process = find_control_server()
     profiles = []
+    crashed = []
     if process:
-        profiles = [
-            status["id"] for status in api("instances")["instances"]
-            if status["state"] in ("starting", "running") and not status.get("unmanaged")
-        ]
-    saved = {"pid": process.pid if process else None, "profiles": profiles}
+        for status in api("instances")["instances"]:
+            if status.get("unmanaged"):
+                continue
+            if status["state"] in ("starting", "running"):
+                profiles.append(status["id"])
+            # A restart forgets the crash, so resume what automatic recovery would have restarted.
+            elif (status["state"] == "failed"
+                  and (status.get("health") or {}).get("state") in ("crashed", "waiting_retry")
+                  and (status.get("health") or {}).get("recovery", {}).get("policy", {}).get("autoRestart")):
+                crashed.append(status["id"])
+    saved = {"pid": process.pid if process else None, "profiles": profiles + crashed}
     state_file.write_text(json.dumps(saved), encoding="utf-8")
     if process is None:
         return

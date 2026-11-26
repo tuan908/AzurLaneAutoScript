@@ -25,7 +25,7 @@ export function LogPeek({ id, onOpen }: { id: string; onOpen: () => void }) {
         </Button>
       </div>
       <div
-        className="relative min-h-0 overflow-auto py-2 font-code text-xs leading-[1.5] text-terminal-text focus-visible:outline-offset-[-2px] h-55"
+        className="relative min-h-0 overflow-auto py-2 font-code text-xs leading-[1.5] text-terminal-text focus-visible:outline-offset-[-2px] h-55 min-[861px]:h-auto min-[861px]:flex-1"
         ref={ref}
         role="region"
         aria-label="Latest log lines"
