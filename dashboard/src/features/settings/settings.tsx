@@ -29,6 +29,8 @@ import { useConfigEditor } from "./use-config-editor";
 
 const route = getRouteApi("/$instanceId/settings");
 const MAX_SEARCH_HITS = 200;
+const STACK = "flex flex-col gap-4";
+const COLUMNS = `${STACK} @min-[72rem]:block @min-[72rem]:columns-2 @min-[72rem]:gap-4 @min-[72rem]:[&>*]:mb-4 @min-[72rem]:[&>*]:break-inside-avoid`;
 
 type Hit = { task: ConfigTask; field: ConfigField };
 
@@ -262,7 +264,7 @@ export function Settings() {
             </>
           ) : (
             <>
-              <div className="flex flex-col gap-4 @min-[72rem]:block @min-[72rem]:columns-2 @min-[72rem]:gap-4 @min-[72rem]:[&>*]:mb-4 @min-[72rem]:[&>*]:break-inside-avoid">
+              <div className={mainGroups.length > 1 ? COLUMNS : STACK}>
                 {mainGroups.map(renderGroup)}
               </div>
               {advancedGroups.length > 0 && (
@@ -284,7 +286,7 @@ export function Settings() {
                   </CollapsibleTrigger>
                   <CollapsiblePanel
                     hiddenUntilFound
-                    className="flex flex-col gap-4 @min-[72rem]:block @min-[72rem]:columns-2 @min-[72rem]:gap-4 @min-[72rem]:[&>*]:mb-4 @min-[72rem]:[&>*]:break-inside-avoid"
+                    className={advancedGroups.length > 1 ? COLUMNS : STACK}
                   >
                     {advancedGroups.map(renderGroup)}
                   </CollapsiblePanel>

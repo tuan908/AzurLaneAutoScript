@@ -15,7 +15,7 @@ const LABELS: Record<Theme, string> = {
 export function ThemeSwitch({ theme, onTheme }: { theme: Theme; onTheme: (t: Theme) => void }) {
   return (
     <SegmentedControl
-      className="inline-flex rounded-full border border-edge bg-panel-2 p-0.5 [&_button]:h-6 [&_button]:rounded-full [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-2.25 [&_button]:text-xs [&_button]:text-subtle [&_button[data-checked]]:bg-panel [&_button[data-checked]]:text-ink"
+      className="inline-flex rounded-full! p-0.5 [&_button]:h-6 [&_button]:rounded-full [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-2.25 [&_button]:text-xs [&_button]:text-subtle [&_button[data-checked]]:text-ink [&_[data-slot=segmented-control-indicator]]:rounded-full"
       aria-label="Theme"
       value={theme}
       onValueChange={(next) => {

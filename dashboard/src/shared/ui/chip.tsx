@@ -18,7 +18,7 @@ export function Chip({
     <span
       title={title}
       className={twMerge(
-        "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-edge bg-panel-2 px-2.5 text-[12.5px] text-secondary [&_strong]:font-semibold [&_strong]:text-ink",
+        "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full bg-fill px-2.5 text-[12.5px] text-secondary [&_strong]:font-semibold [&_strong]:text-ink",
         className,
       )}
     >

@@ -57,7 +57,7 @@ export function InstanceRail({
         return (
           <SdkButton
             key={s.id}
-            className="grid! h-auto! min-h-16 w-full min-w-50 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-1 rounded-alas! border border-transparent! bg-transparent! px-3 py-2.5 text-left transition-colors hover:border-edge! hover:bg-panel! aria-[current=true]:border-edge-strong! aria-[current=true]:bg-panel! aria-[current=true]:shadow-alas min-[861px]:min-w-0"
+            className="grid! h-auto! min-h-16 w-full min-w-50 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-1 rounded-alas! border border-transparent! bg-transparent! px-3 py-2.5 text-left transition-colors hover:bg-fill! aria-[current=true]:bg-panel! aria-[current=true]:shadow-raised min-[861px]:min-w-0"
             onClick={() => onSelect(s.id)}
             aria-current={s.id === selected ? "true" : undefined}
           >
@@ -80,7 +80,7 @@ export function InstanceRail({
       })}
       <Button
         ref={trigger}
-        className="min-w-32.5 border-dashed! text-secondary! min-[861px]:mt-1.5"
+        className="min-w-32.5 text-secondary! min-[861px]:mt-1.5"
         onClick={() => setCreating(true)}
       >
         <Icon name="plus" />

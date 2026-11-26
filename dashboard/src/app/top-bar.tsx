@@ -23,7 +23,7 @@ export function TopBar({ theme, onTheme }: { theme: Theme; onTheme: (t: Theme) =
   const lang = useLang();
   const overall = h?.health?.status;
   return (
-    <header className="col-span-full flex min-h-13 flex-wrap items-center gap-4 border-b border-edge bg-panel px-4 py-2.5 max-[600px]:p-3">
+    <header className="col-span-full flex min-h-13 flex-wrap items-center gap-4 border-b border-edge bg-panel/75 backdrop-blur-xl backdrop-saturate-150 px-4 py-2.5 max-[600px]:p-3">
       <Brand />
       <div className="flex flex-wrap items-center gap-2 min-[861px]:ml-auto max-[600px]:gap-1.5">
         <CommandPalette theme={theme} onTheme={onTheme} />
@@ -69,7 +69,7 @@ export function TopBar({ theme, onTheme }: { theme: Theme; onTheme: (t: Theme) =
         )}
         {h?.logQueueManagerAlive === false && <Chip className="text-bad">Log queue down</Chip>}
         <Select
-          className="min-h-7! w-24! min-w-0! rounded-full! bg-panel-2! text-xs!"
+          className="min-h-7! w-24! min-w-0! rounded-full! border-transparent! bg-fill! text-xs!"
           label="Settings language"
           items={LANGS}
           value={lang}

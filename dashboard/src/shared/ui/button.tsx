@@ -4,17 +4,17 @@ import type { ComponentProps } from "react";
 import { twMerge } from "tailwind-merge";
 
 const buttonStyles = cva(
-  "inline-flex! items-center justify-center gap-1.5 rounded-alas-sm! border font-medium whitespace-nowrap transition-colors disabled:opacity-55",
+  "inline-flex! items-center justify-center gap-1.5 rounded-alas-sm! border font-medium whitespace-nowrap transition-[background-color,filter] active:brightness-95 disabled:opacity-45",
   {
     variants: {
       variant: {
-        outline: "border-edge-strong bg-panel text-ink hover:bg-panel-3",
-        primary: "border-accent! bg-accent! text-on-accent! hover:bg-accent-strong!",
-        danger: "border-bad! bg-bad! text-white! hover:brightness-95",
-        ghost: "border-transparent! bg-transparent! text-secondary! hover:bg-panel-3!",
+        outline: "border-transparent! bg-fill! text-ink hover:bg-fill-strong!",
+        primary: "border-accent-fill! bg-accent-fill! text-on-accent! hover:brightness-110",
+        danger: "border-bad-fill! bg-bad-fill! text-white! hover:brightness-110",
+        ghost: "border-transparent! bg-transparent! text-secondary! hover:bg-fill!",
       },
       size: {
-        default: "min-h-8.5 px-3.5",
+        default: "min-h-8 px-3.5",
         small: "min-h-7! px-2.5! text-[12.5px]!",
       },
     },

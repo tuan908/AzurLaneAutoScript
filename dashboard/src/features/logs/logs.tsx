@@ -102,9 +102,9 @@ export function Logs() {
       data-fill-height
       className="flex min-h-0 flex-col overflow-hidden min-[861px]:flex-1 rounded-alas border border-edge bg-terminal shadow-alas"
     >
-      <div className="flex flex-wrap items-center gap-2 border-b border-[#1d2330] bg-[#121620] px-2.5 py-2 text-terminal-dim [&_input:not([type=checkbox])]:min-h-7 [&_input:not([type=checkbox])]:border-[#262d3b] [&_input:not([type=checkbox])]:bg-[#0b0e14] [&_input:not([type=checkbox])]:text-[12.5px] [&_input:not([type=checkbox])]:text-terminal-text [&_label]:inline-flex [&_label]:items-center [&_label]:gap-1.5 [&_label]:text-xs">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[#38383a] bg-[#242426] px-2.5 py-2 text-terminal-dim [&_input:not([type=checkbox])]:min-h-7 [&_input:not([type=checkbox])]:border-[#3a3a3c] [&_input:not([type=checkbox])]:bg-[#1c1c1e] [&_input:not([type=checkbox])]:text-[12.5px] [&_input:not([type=checkbox])]:text-terminal-text [&_label]:inline-flex [&_label]:items-center [&_label]:gap-1.5 [&_label]:text-xs">
         <Input
-          className="min-w-40 flex-1 max-[600px]:basis-full"
+          className="min-h-7! min-w-40 flex-1 border-[#3a3a3c]! bg-[#1c1c1e]! text-[12.5px]! text-terminal-text! max-[600px]:basis-full"
           type="search"
           aria-label="Filter logs"
           placeholder="Filter…"
@@ -112,7 +112,7 @@ export function Logs() {
           onValueChange={updateFilter}
         />
         <SegmentedControl
-          className="inline-flex rounded-full border border-[#262d3b] p-0.5 [&_button]:h-5.5 [&_button]:rounded-full [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-2.5 [&_button]:text-xs [&_button]:text-terminal-dim [&_button[data-checked]]:bg-terminal-sel [&_button[data-checked]]:text-terminal-text"
+          className="inline-flex rounded-full border-0 bg-white/10 p-0.5 [&_button]:h-5.5 [&_button]:rounded-full [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-2.5 [&_button]:text-xs [&_button]:text-terminal-dim [&_button[data-checked]]:text-terminal-text [&_[data-slot=segmented-control-indicator]]:rounded-full [&_[data-slot=segmented-control-indicator]]:bg-[#48484a]! [&_[data-slot=segmented-control-indicator]]:shadow-none"
           aria-label="Log level"
           value={level}
           onValueChange={updateLevel}
@@ -135,7 +135,11 @@ export function Logs() {
           </Checkbox>
           Follow
         </label>
-        <Button size="small" onClick={download}>
+        <Button
+          size="small"
+          className="border-transparent! bg-white/12! text-terminal-text! hover:bg-white/18!"
+          onClick={download}
+        >
           <Icon name="download" />
           Export
         </Button>

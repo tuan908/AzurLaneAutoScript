@@ -32,9 +32,9 @@ export function Workspace({ status, children }: { status: InstanceStatus; childr
 
   return (
     <>
-      <div className="sticky top-0 z-5 border-b border-edge bg-canvas/90 px-4 pt-4.5 backdrop-blur-md min-[861px]:px-6">
+      <div className="sticky top-0 z-5 border-b border-edge bg-canvas/80 px-4 pt-4.5 backdrop-blur-xl backdrop-saturate-150 min-[861px]:px-6">
         <div className="flex flex-wrap items-center gap-3 [&_h2]:min-w-0 [&_h2]:wrap-anywhere">
-          <h2>{status.id}</h2>
+          <h2 className="text-2xl! font-bold! tracking-tight">{status.id}</h2>
           <StatusBadge tone={tone.tone} pulse={status.state === "running"} large>
             {tone.label}
           </StatusBadge>
@@ -73,7 +73,7 @@ export function Workspace({ status, children }: { status: InstanceStatus; childr
         </div>
         <nav
           aria-label="Profile views"
-          className="mt-3.5 flex gap-0.5 overflow-x-auto [scrollbar-width:thin] [&_a]:relative [&_a]:inline-flex [&_a]:items-center [&_a]:h-9.5 [&_a]:shrink-0 [&_a]:border-0 [&_a]:bg-transparent [&_a]:px-3 [&_a]:font-semibold [&_a]:whitespace-nowrap [&_a]:no-underline [&_a]:text-subtle [&_a:hover]:text-ink [&_a[aria-current=page]]:text-ink [&_a[aria-current=page]]:after:absolute [&_a[aria-current=page]]:after:inset-x-2 [&_a[aria-current=page]]:after:bottom-0 [&_a[aria-current=page]]:after:h-0.5 [&_a[aria-current=page]]:after:bg-accent"
+          className="my-3.5 flex w-fit max-w-full gap-0.5 overflow-x-auto rounded-[9px] bg-fill p-0.5 [scrollbar-width:none] [&_a]:inline-flex [&_a]:h-7 [&_a]:shrink-0 [&_a]:items-center [&_a]:rounded-[7px] [&_a]:px-3.5 [&_a]:text-[13px] [&_a]:font-medium [&_a]:whitespace-nowrap [&_a]:no-underline [&_a]:text-secondary [&_a]:transition-colors [&_a:hover]:text-ink [&_a[aria-current=page]]:bg-raised [&_a[aria-current=page]]:text-ink [&_a[aria-current=page]]:shadow-raised"
         >
           {TABS.map((name) => (
             <Link key={name} to={tabPath(name)} params={{ instanceId: status.id }} search={{}}>

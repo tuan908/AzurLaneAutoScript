@@ -14,9 +14,13 @@ export function LogPeek({ id, onOpen }: { id: string; onOpen: () => void }) {
   }, [last]);
   return (
     <section className="flex min-h-0 flex-col overflow-hidden rounded-alas border border-edge bg-terminal shadow-alas">
-      <div className="flex flex-wrap items-center gap-2 border-b border-[#1d2330] bg-[#121620] px-2.5 py-2 text-terminal-dim [&_input:not([type=checkbox])]:w-55 [&_input:not([type=checkbox])]:min-h-7 [&_input:not([type=checkbox])]:border-[#262d3b] [&_input:not([type=checkbox])]:bg-[#0b0e14] [&_input:not([type=checkbox])]:text-[12.5px] [&_input:not([type=checkbox])]:text-terminal-text [&_label]:inline-flex [&_label]:items-center [&_label]:gap-1.5 [&_label]:text-xs max-[600px]:[&_input:not([type=checkbox])]:w-full">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[#38383a] bg-[#242426] px-2.5 py-2 text-terminal-dim [&_input:not([type=checkbox])]:w-55 [&_input:not([type=checkbox])]:min-h-7 [&_input:not([type=checkbox])]:border-[#3a3a3c] [&_input:not([type=checkbox])]:bg-[#1c1c1e] [&_input:not([type=checkbox])]:text-[12.5px] [&_input:not([type=checkbox])]:text-terminal-text [&_label]:inline-flex [&_label]:items-center [&_label]:gap-1.5 [&_label]:text-xs max-[600px]:[&_input:not([type=checkbox])]:w-full">
         <span>Live log</span>
-        <Button size="small" className="ml-auto" onClick={onOpen}>
+        <Button
+          size="small"
+          className="ml-auto border-transparent! bg-white/12! text-terminal-text! hover:bg-white/18!"
+          onClick={onOpen}
+        >
           Open logs
         </Button>
       </div>

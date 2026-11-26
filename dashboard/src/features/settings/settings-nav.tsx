@@ -86,7 +86,7 @@ export function SettingsNav({
           return (
             <AccordionItem key={menu.id} value={menu.id}>
               <AccordionHeader className="m-0">
-                <AccordionTrigger className="flex! h-auto! min-h-0! w-full items-center justify-between rounded-alas-sm! border-0! bg-transparent! px-2 py-1.5 text-left hover:bg-panel-3!">
+                <AccordionTrigger className="flex! h-auto! min-h-0! w-full items-center justify-between rounded-alas-sm! border-0! bg-transparent! px-2 py-1.5 text-left hover:bg-fill!">
                   <span className="min-w-0 truncate">
                     <SectionLabel>{menu.name}</SectionLabel>
                   </span>
@@ -107,7 +107,7 @@ export function SettingsNav({
                 {menu.tasks.map((task) => (
                   <div key={task.id}>
                     <SdkButton
-                      className="block! h-auto! w-full rounded-alas-sm! border-0! bg-transparent! px-2.5 py-1.5 text-left text-[13px] leading-snug whitespace-normal! text-secondary hover:bg-panel-3! hover:text-ink aria-[current=true]:bg-accent-soft! aria-[current=true]:font-semibold aria-[current=true]:text-accent!"
+                      className="block! h-auto! w-full rounded-alas-sm! border-0! bg-transparent! px-2.5 py-1.5 text-left text-[13px] leading-snug whitespace-normal! text-secondary hover:bg-fill! hover:text-ink aria-[current=true]:bg-accent-fill! aria-[current=true]:font-semibold aria-[current=true]:text-white!"
                       aria-current={currentTaskId === task.id && !searching ? "true" : undefined}
                       onClick={() => onTask(task.id)}
                     >

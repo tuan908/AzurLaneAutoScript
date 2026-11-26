@@ -5,101 +5,126 @@
 /* ------------------------------------------------------------------ tokens */
 
 :root {
-  --font: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --mono: "Cascadia Mono", "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --font:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", "Inter",
+    system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 
-  --bg: #f4f5f7;
+  --bg: #f2f2f7;
   --surface: #ffffff;
-  --surface-2: #f8f9fb;
-  --surface-3: #eef0f4;
-  --text: #171b24;
-  --text-2: #4b5363;
-  --muted: #646d7e;
-  --border: #e3e6ec;
-  --border-strong: #cfd4dd;
-  --accent: #4f5bd5;
-  --accent-strong: #3d48b8;
-  --accent-soft: #eceefc;
+  --surface-2: #ebebf0;
+  --surface-3: #e5e5ea;
+  --fill: rgb(118 118 128 / 12%);
+  --fill-strong: rgb(118 118 128 / 20%);
+  --text: #1d1d1f;
+  --text-2: #3c3c43;
+  --muted: #6e6e73;
+  --border: #e5e5ea;
+  --border-strong: #c6c6c8;
+  --accent: #0066cc;
+  --accent-strong: #0055b3;
+  --accent-fill: #0071e3;
+  --accent-soft: #e5f0fd;
   --on-accent: #ffffff;
+  --switch-on: #34c759;
+  --raised-bg: #ffffff;
 
-  --ok: #117638;
-  --ok-soft: #e7f6ec;
-  --warn: #855809;
-  --warn-soft: #fbf3e1;
-  --bad: #b5262b;
-  --bad-soft: #fcebeb;
-  --idle: #616977;
-  --idle-soft: #eef0f3;
+  --ok: #248a3d;
+  --ok-soft: #e3f6e8;
+  --warn: #b25000;
+  --warn-soft: #fff1e0;
+  --bad: #d70015;
+  --bad-fill: #d70015;
+  --bad-soft: #ffe9e9;
+  --idle: #6e6e73;
+  --idle-soft: #ececf0;
 
-  --term-bg: #0e1117;
-  --term-text: #cdd5e1;
-  --term-dim: #8792a4;
-  --term-warn: #e9c46a;
-  --term-bad: #ff8b8b;
-  --term-sel: #1b2230;
+  --term-bg: #1c1c1e;
+  --term-text: #e5e5ea;
+  --term-dim: #98989f;
+  --term-warn: #ffd60a;
+  --term-bad: #ff6961;
+  --term-sel: #2c2c2e;
 
-  --radius: 10px;
-  --radius-sm: 7px;
-  --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 1px 3px rgb(16 24 40 / 4%);
-  --shadow-lg: 0 10px 30px rgb(16 24 40 / 14%), 0 2px 6px rgb(16 24 40 / 8%);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 0 0 0.5px rgb(0 0 0 / 4%), 0 1px 2px rgb(0 0 0 / 4%);
+  --shadow-lg: 0 0 0 0.5px rgb(0 0 0 / 8%), 0 10px 30px rgb(0 0 0 / 12%), 0 2px 6px rgb(0 0 0 / 6%);
+  --raised: 0 0 0 0.5px rgb(0 0 0 / 4%), 0 3px 8px rgb(0 0 0 / 12%), 0 3px 1px rgb(0 0 0 / 4%);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0d1016;
-    --surface: #151922;
-    --surface-2: #1a1f2a;
-    --surface-3: #212735;
-    --text: #e7ebf2;
-    --text-2: #b3bccb;
-    --muted: #8994a6;
-    --border: #262c39;
-    --border-strong: #343c4d;
-    --accent: #8088f2;
-    --accent-strong: #9aa1f6;
-    --accent-soft: #232742;
-    --on-accent: #0d1016;
-    --ok: #3ccf74;
-    --ok-soft: #14291d;
-    --warn: #e6ad3c;
-    --warn-soft: #2d2513;
-    --bad: #f06767;
-    --bad-soft: #321919;
-    --idle: #8d96a6;
-    --idle-soft: #232835;
-    --term-bg: #0a0c11;
-    --shadow: 0 1px 2px rgb(0 0 0 / 40%);
-    --shadow-lg: 0 12px 32px rgb(0 0 0 / 50%);
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --surface-2: #121214;
+    --surface-3: #2c2c2e;
+    --fill: rgb(118 118 128 / 24%);
+    --fill-strong: rgb(118 118 128 / 32%);
+    --text: #f5f5f7;
+    --text-2: #d1d1d6;
+    --muted: #98989f;
+    --border: #2c2c2e;
+    --border-strong: #3a3a3c;
+    --accent: #2997ff;
+    --accent-strong: #64b0ff;
+    --accent-fill: #0071e3;
+    --accent-soft: #0b2a4a;
+    --on-accent: #ffffff;
+    --switch-on: #30d158;
+    --raised-bg: #636366;
+    --raised-bg: #636366;
+    --ok: #30d158;
+    --ok-soft: #0f2e18;
+    --warn: #ff9f0a;
+    --warn-soft: #33230a;
+    --bad: #ff453a;
+    --bad-fill: #d70015;
+    --bad-soft: #3a1210;
+    --idle: #98989f;
+    --idle-soft: #2c2c2e;
+    --term-bg: #0d0d0f;
+    --term-sel: #232326;
+    --shadow: 0 0 0 0.5px rgb(255 255 255 / 6%);
+    --shadow-lg: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 12px 32px rgb(0 0 0 / 60%);
+    --raised: 0 0 0 0.5px rgb(255 255 255 / 8%), 0 3px 8px rgb(0 0 0 / 40%);
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #0d1016;
-  --surface: #151922;
-  --surface-2: #1a1f2a;
-  --surface-3: #212735;
-  --text: #e7ebf2;
-  --text-2: #b3bccb;
-  --muted: #8994a6;
-  --border: #262c39;
-  --border-strong: #343c4d;
-  --accent: #8088f2;
-  --accent-strong: #9aa1f6;
-  --accent-soft: #232742;
-  --on-accent: #0d1016;
-  --ok: #3ccf74;
-  --ok-soft: #14291d;
-  --warn: #e6ad3c;
-  --warn-soft: #2d2513;
-  --bad: #f06767;
-  --bad-soft: #321919;
-  --idle: #8d96a6;
-  --idle-soft: #232835;
-  --term-bg: #0a0c11;
-  --shadow: 0 1px 2px rgb(0 0 0 / 40%);
-  --shadow-lg: 0 12px 32px rgb(0 0 0 / 50%);
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --surface-2: #121214;
+  --surface-3: #2c2c2e;
+  --fill: rgb(118 118 128 / 24%);
+  --fill-strong: rgb(118 118 128 / 32%);
+  --text: #f5f5f7;
+  --text-2: #d1d1d6;
+  --muted: #98989f;
+  --border: #2c2c2e;
+  --border-strong: #3a3a3c;
+  --accent: #2997ff;
+  --accent-strong: #64b0ff;
+  --accent-fill: #0071e3;
+  --accent-soft: #0b2a4a;
+  --on-accent: #ffffff;
+  --switch-on: #30d158;
+  --ok: #30d158;
+  --ok-soft: #0f2e18;
+  --warn: #ff9f0a;
+  --warn-soft: #33230a;
+  --bad: #ff453a;
+  --bad-fill: #d70015;
+  --bad-soft: #3a1210;
+  --idle: #98989f;
+  --idle-soft: #2c2c2e;
+  --term-bg: #0d0d0f;
+  --term-sel: #232326;
+  --shadow: 0 0 0 0.5px rgb(255 255 255 / 6%);
+  --shadow-lg: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 12px 32px rgb(0 0 0 / 60%);
+  --raised: 0 0 0 0.5px rgb(255 255 255 / 8%), 0 3px 8px rgb(0 0 0 / 40%);
   color-scheme: dark;
 }
 
@@ -116,6 +141,12 @@
   --color-accent: var(--accent);
   --color-accent-strong: var(--accent-strong);
   --color-accent-soft: var(--accent-soft);
+  --color-accent-fill: var(--accent-fill);
+  --color-fill: var(--fill);
+  --color-fill-strong: var(--fill-strong);
+  --color-bad-fill: var(--bad-fill);
+  --color-switch-on: var(--switch-on);
+  --color-raised: var(--raised-bg);
   --color-on-accent: var(--on-accent);
   --color-ok: var(--ok);
   --color-ok-soft: var(--ok-soft);
@@ -137,6 +168,7 @@
   --radius-alas-sm: var(--radius-sm);
   --shadow-alas: var(--shadow);
   --shadow-alas-lg: var(--shadow-lg);
+  --shadow-raised: var(--raised);
 }
 
 @layer base {
@@ -176,7 +208,7 @@
   --ui-muted-foreground: var(--text-2);
   --ui-border: var(--border);
   --ui-input: var(--border-strong);
-  --ui-primary: var(--accent);
+  --ui-primary: var(--accent-fill);
   --ui-primary-foreground: var(--on-accent);
   --ui-destructive: var(--bad);
   --ui-ring: var(--accent);
@@ -192,15 +224,57 @@
   textarea:not([aria-hidden="true"]),
   select
 ) {
-  @apply w-full min-h-8.5 rounded-alas-sm border border-edge-strong bg-panel px-2.5 py-1.5 text-ink;
+  @apply w-full min-h-8 rounded-alas-sm border border-edge-strong bg-panel px-2.5 py-1.5 text-ink shadow-[inset_0_0.5px_1px_rgb(0_0_0/4%)];
 }
 :where(
   input:not([type="checkbox"], [type="radio"], [type="hidden"]),
   textarea:not([aria-hidden="true"]),
   select
 ):focus {
-  @apply border-accent outline-none ring-2 ring-accent-soft;
+  @apply border-accent-fill outline-none ring-[3.5px] ring-accent-fill/35;
 }
 textarea {
   @apply resize-y font-code text-[12.5px];
+}
+
+/* Apple-style controls: iOS switch, raised segmented thumb, soft focus halo. */
+@layer components {
+  [data-slot="switch"] {
+    width: 2.375rem;
+    height: 1.4375rem;
+    padding: 2px;
+    border: 0;
+    background: var(--fill-strong);
+    transition: background-color 0.2s ease;
+  }
+  [data-slot="switch"][data-checked] {
+    background: var(--switch-on);
+  }
+  [data-slot="switch-thumb"],
+  [data-slot="switch-thumb"][data-checked] {
+    width: 1.1875rem;
+    height: 1.1875rem;
+    background: #ffffff;
+    box-shadow:
+      0 3px 8px rgb(0 0 0 / 15%),
+      0 3px 1px rgb(0 0 0 / 6%);
+  }
+  [data-slot="segmented-control"] {
+    border: 0;
+    border-radius: 9px;
+    background: var(--fill);
+  }
+  [data-slot="segmented-control-indicator"] {
+    border: 0;
+    border-radius: 7px;
+    background: var(--raised-bg);
+    box-shadow: var(--raised);
+    transition:
+      left 0.2s ease,
+      width 0.2s ease;
+  }
+  [data-slot="checkbox"][data-checked] {
+    border-color: var(--accent-fill);
+    background: var(--accent-fill);
+  }
 }
