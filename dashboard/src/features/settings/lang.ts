@@ -20,3 +20,21 @@ export function saveLang(lang: Lang) {
     // Not remembered when storage is unavailable.
   }
 }
+
+const KEYS_KEY = "alas.settings.showKeys";
+
+export function readShowKeys() {
+  try {
+    return localStorage.getItem(KEYS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function saveShowKeys(show: boolean) {
+  try {
+    localStorage.setItem(KEYS_KEY, show ? "1" : "0");
+  } catch {
+    // Not remembered when storage is unavailable.
+  }
+}

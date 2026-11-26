@@ -3,6 +3,7 @@ import { Switch, SwitchThumb } from "@ui-sdk/react/switch";
 import { Textarea } from "@ui-sdk/react/textarea";
 
 import type { ConfigField, ConfigValue } from "@/api/client";
+import { Button } from "@/shared/ui/button";
 import { Select } from "@/shared/ui/select";
 
 import { SettingHelp } from "./setting-help";
@@ -15,6 +16,8 @@ export function SettingField({
   field,
   value,
   edited,
+  changed,
+  showKey,
   disabled,
   error,
   onChange,
@@ -22,6 +25,8 @@ export function SettingField({
   field: ConfigField;
   value: ConfigValue;
   edited: boolean;
+  changed: boolean;
+  showKey: boolean;
   disabled: boolean;
   error: string | undefined;
   onChange: (v: ConfigValue) => void;
@@ -107,15 +112,42 @@ export function SettingField({
       />
     );
   }
+  const defaultLabel =
+    field.options?.find((o) => String(o.value) === String(field.default))?.label ??
+    String(field.default);
   return (
     <div
-      className={`-mx-4.5 grid grid-cols-1 gap-x-6 gap-y-1.5 border-t border-edge px-4.5 py-3 first-of-type:border-t-0 min-[981px]:grid-cols-[minmax(200px,.9fr)_minmax(220px,1.1fr)] [&>label]:flex [&>label]:flex-col [&>label]:gap-0.5 [&>label]:text-[13px] [&>label]:font-semibold ${error ? "bg-bad-soft/70 shadow-[inset_3px_0_0_var(--bad)]" : edited ? "bg-warn-soft/70 shadow-[inset_3px_0_0_var(--warn)]" : ""}`}
+      className={`-mx-4.5 grid grid-cols-1 gap-x-6 gap-y-1.5 border-t border-edge px-4.5 py-3 first-of-type:border-t-0 min-[981px]:grid-cols-[minmax(0,1fr)_18rem] [&>label]:flex [&>label]:flex-col [&>label]:gap-0.5 [&>label]:text-[13px] [&>label]:font-semibold ${error ? "bg-bad-soft/70 shadow-[inset_3px_0_0_var(--bad)]" : edited ? "bg-warn-soft/70 shadow-[inset_3px_0_0_var(--warn)]" : ""}`}
     >
-      <label htmlFor={id}>
-        {field.label}
-        <span className="wrap-anywhere font-code text-[11px] leading-[1.4] font-normal text-subtle">
-          {field.path}
+      <label htmlFor={id} title={showKey ? undefined : field.path}>
+        <span className="inline-flex flex-wrap items-center gap-x-2">
+          {field.label}
+          {changed && (
+            <span
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-accent before:size-1.5 before:rounded-full before:bg-accent"
+              title={`Default: ${defaultLabel}`}
+            >
+              Changed
+            </span>
+          )}
+          {changed && !disabled && (
+            <Button
+              variant="ghost"
+              size="small"
+              className="-my-1 min-h-6! px-1.5! text-[11px]! text-accent!"
+              aria-label={`Reset ${field.label} to default (${defaultLabel})`}
+              title={`Reset to default: ${defaultLabel}`}
+              onClick={() => onChange(field.default)}
+            >
+              Reset
+            </Button>
+          )}
         </span>
+        {showKey && (
+          <span className="wrap-anywhere font-code text-[11px] leading-[1.4] font-normal text-subtle">
+            {field.path}
+          </span>
+        )}
       </label>
       <div className="flex min-w-0 items-center [&_[data-slot=select-trigger]]:w-full">
         {control}

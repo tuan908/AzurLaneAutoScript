@@ -7,41 +7,54 @@ import { Card } from "@/shared/ui/card";
 import { QueryNotice } from "@/shared/ui/query-content";
 import { SectionLabel } from "@/shared/ui/section-label";
 
-import { readLang, saveLang } from "./lang";
+import { readLang, readShowKeys, saveLang, saveShowKeys } from "./lang";
 import { configSchemaQuery } from "./queries";
 import { SaveBar } from "./save-bar";
 import { SettingField } from "./setting-field";
 import { SettingHelp } from "./setting-help";
 import { SettingsNav } from "./settings-nav";
+import { TaskHeader } from "./task-header";
+import { headerPaths, isChanged, schedulerOf } from "./task-state";
 import { useConfigEditor } from "./use-config-editor";
 
 const route = getRouteApi("/$instanceId/settings");
 const MAX_SEARCH_HITS = 200;
 
-function searchFields(tasks: ConfigTask[], query: string) {
+function searchFields(
+  tasks: ConfigTask[],
+  query: string,
+  changedOnly: boolean,
+  isDifferent: (field: ConfigField) => boolean,
+) {
   const q = query.trim().toLowerCase();
-  if (!q) return null;
+  if (!q && !changedOnly) return null;
   const hits: { task: ConfigTask; field: ConfigField }[] = [];
   for (const task of tasks)
     for (const group of task.groups)
-      for (const field of group.fields)
-        if (field.label.toLowerCase().includes(q) || field.path.toLowerCase().includes(q))
-          hits.push({ task, field });
+      for (const field of group.fields) {
+        if (changedOnly && !isDifferent(field)) continue;
+        if (q && !field.label.toLowerCase().includes(q) && !field.path.toLowerCase().includes(q))
+          continue;
+        hits.push({ task, field });
+      }
   return hits.slice(0, MAX_SEARCH_HITS);
 }
 
 export function Settings() {
   const { instanceId: id } = route.useParams();
-  const { q: search, task: taskId } = route.useSearch();
+  const { q: search, task: taskId, changed: changedOnly } = route.useSearch();
   const navigate = route.useNavigate();
   const [lang, setLang] = useState(readLang);
+  const [showKeys, setShowKeys] = useState(readShowKeys);
   const editor = useConfigEditor(id);
   const { doc, edits, errors } = editor;
   const schema = useQuery(configSchemaQuery(id, lang));
 
   const tasks = useMemo(() => schema.data?.menus.flatMap((m) => m.tasks) ?? [], [schema.data]);
   const current = tasks.find((t) => t.id === taskId) ?? tasks[0];
-  const searchHits = useMemo(() => searchFields(tasks, search), [search, tasks]);
+  const isDifferent = (field: ConfigField) =>
+    field.path in edits || isChanged(field, editor.valueOf(field));
+  const searchHits = searchFields(tasks, search, changedOnly, isDifferent);
 
   const notices = (
     <>
@@ -58,11 +71,22 @@ export function Settings() {
       value={editor.valueOf(field)}
       disabled={editor.blocked || schema.isError}
       edited={field.path in edits}
+      changed={isChanged(field, editor.valueOf(field))}
+      showKey={showKeys}
       error={errors[field.path]}
       onChange={(v) => editor.change(field, v)}
     />
   );
-  const fieldCount = current?.groups.reduce((n, g) => n + g.fields.length, 0) ?? 0;
+  const inHeader = current ? headerPaths(current) : new Set<string>();
+  const bodyGroups =
+    current?.groups
+      .map((g) => ({ ...g, fields: g.fields.filter((f) => !inHeader.has(f.path)) }))
+      .filter((g) => g.fields.length > 0) ?? [];
+  const fieldCount = bodyGroups.reduce((n, g) => n + g.fields.length, 0);
+  const enabledOf = (task: ConfigTask) => {
+    const scheduler = schedulerOf(task);
+    return scheduler ? editor.valueOf(scheduler.enable) === true : null;
+  };
 
   return (
     <>
@@ -72,7 +96,20 @@ export function Settings() {
           menus={schema.data.menus}
           currentTaskId={current?.id}
           searching={searchHits !== null}
+          enabledOf={enabledOf}
           search={search}
+          changedOnly={changedOnly}
+          onChangedOnly={(next) =>
+            void navigate({
+              search: (previous) => ({ ...previous, changed: next }),
+              replace: true,
+            })
+          }
+          showKeys={showKeys}
+          onShowKeys={(next) => {
+            setShowKeys(next);
+            saveShowKeys(next);
+          }}
           onSearch={(next) =>
             void navigate({
               search: (previous) => ({ ...previous, q: next }),
@@ -84,20 +121,20 @@ export function Settings() {
             setLang(next);
             saveLang(next);
           }}
-          onTask={(next) => void navigate({ search: { q: "", task: next } })}
+          onTask={(next) => void navigate({ search: { q: "", task: next, changed: false } })}
         />
 
-        <section className="flex min-w-0 flex-col gap-4">
+        <section className="flex min-w-0 max-w-240 flex-col gap-4">
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
             <h2 className="text-lg">
               {searchHits
-                ? `${searchHits.length} matching setting${searchHits.length === 1 ? "" : "s"}`
+                ? `${searchHits.length} ${changedOnly ? "changed" : "matching"} setting${searchHits.length === 1 ? "" : "s"}`
                 : current?.name}
             </h2>
             {!searchHits && current && (
               <span className="text-xs text-subtle">
-                {fieldCount} settings in {current.groups.length} group
-                {current.groups.length === 1 ? "" : "s"}
+                {fieldCount} settings in {bodyGroups.length} group
+                {bodyGroups.length === 1 ? "" : "s"}
               </span>
             )}
             <span
@@ -108,6 +145,16 @@ export function Settings() {
             </span>
           </div>
           {!searchHits && current?.help && <SettingHelp text={current.help} about={current.name} />}
+          {!searchHits && current && (
+            <TaskHeader
+              instanceId={id}
+              task={current}
+              valueOf={editor.valueOf}
+              edited={(field) => field.path in edits}
+              disabled={editor.blocked || schema.isError}
+              onChange={editor.change}
+            />
+          )}
 
           <SaveBar editor={editor} saveBlocked={schema.isError} />
           <p className={editor.notice ? "text-[13px] text-ok" : "sr-only"} role="status">
@@ -118,7 +165,7 @@ export function Settings() {
             <Card className="[&_h3]:mb-0.5">
               {searchHits.length === 0 && (
                 <div className="py-4.5 text-center text-[13px] text-subtle">
-                  No setting matches.
+                  {changedOnly ? "Every setting matches its default." : "No setting matches."}
                 </div>
               )}
               {searchHits.map(({ task, field }, i) => (
@@ -133,7 +180,7 @@ export function Settings() {
               ))}
             </Card>
           ) : (
-            current?.groups.map((group) => (
+            bodyGroups.map((group) => (
               <Card key={group.id} className="[&_h3]:mb-0.5">
                 <h3>{group.name}</h3>
                 {group.help && (
