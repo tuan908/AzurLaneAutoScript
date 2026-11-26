@@ -20,6 +20,8 @@ psutil==5.9.3
 # Same versions as requirements.txt.
 rich==11.2.0
 inflection==0.5.1
+# Imported by alas.py, which tests/control/test_self_heal.py loads with a stubbed config.
+cached-property==1.5.2
 # The control API (module/control/api.py) and its TestClient. Same versions as
 # requirements.txt; requests 2.18.4 needs the pinned chardet/idna/urllib3/certifi.
 starlette==0.14.2

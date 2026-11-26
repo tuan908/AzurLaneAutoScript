@@ -2,6 +2,7 @@ import os
 import re
 import threading
 import time
+import traceback
 from datetime import datetime, timedelta
 
 import inflection
@@ -15,6 +16,22 @@ from module.logger import logger
 from module.notify import handle_notify
 
 
+# A task that keeps failing is postponed this long while the other tasks keep running.
+TASK_COOLDOWN_MINUTES = 180
+# More postponed tasks than this within an hour means the problem is not one task: ask for a human.
+MAX_POSTPONES_PER_HOUR = 3
+# Code under these folders talks to the emulator or logs in: its takeovers affect every task.
+GLOBAL_TAKEOVER_PATHS = ('module/device/', 'module/handler/login', 'module/daemon/')
+
+
+def is_global_takeover(error):
+    for frame in traceback.extract_tb(error.__traceback__):
+        path = frame.filename.replace('\\', '/')
+        if any(part in path for part in GLOBAL_TAKEOVER_PATHS):
+            return True
+    return False
+
+
 class AzurLaneAutoScript:
     stop_event: threading.Event = None
 
@@ -26,6 +43,11 @@ class AzurLaneAutoScript:
         # Failure count of tasks
         # Key: str, task name, value: int, failure count
         self.failure_record = {}
+        # Game relaunches spent on an unknown page since the last successful task
+        self.page_unknown_relaunches = 0
+        # Set by run() when the task asked for a human but other tasks can go on
+        self.postpone_reason = None
+        self.postpone_times = []
 
     @cached_property
     def config(self):
@@ -67,8 +89,10 @@ class AzurLaneAutoScript:
             if not skip_first_screenshot:
                 self.device.screenshot()
             self.__getattribute__(command)()
+            self.page_unknown_relaunches = 0
             return True
         except TaskEnd:
+            self.page_unknown_relaunches = 0
             return True
         except GameNotRunningError as e:
             logger.warning(e)
@@ -93,6 +117,13 @@ class AzurLaneAutoScript:
         except GamePageUnknownError:
             logger.info('Game server may be under maintenance or network may be broken, check server status now')
             self.checker.check_now()
+            if self.checker.is_available() and self.page_unknown_relaunches < 1 and command != 'restart':
+                self.page_unknown_relaunches += 1
+                logger.error('Game page unknown')
+                self.save_error_log()
+                logger.warning(f'Relaunching {self.device.package} to get back to a known page')
+                self.config.task_call('Restart')
+                return False
             if self.checker.is_available():
                 logger.critical('Game page unknown')
                 self.save_error_log()
@@ -114,7 +145,10 @@ class AzurLaneAutoScript:
                 content=f"<{self.config_name}> ScriptError",
             )
             exit(1)
-        except RequestHumanTakeover:
+        except RequestHumanTakeover as e:
+            if command != 'restart' and not is_global_takeover(e):
+                self.postpone_reason = 'needs your attention, see the messages above'
+                return False
             logger.critical('Request human takeover')
             handle_notify(
                 self.config.Error_OnePushConfig,
@@ -131,6 +165,30 @@ class AzurLaneAutoScript:
                 content=f"<{self.config_name}> Exception occured",
             )
             exit(1)
+
+    def postpone_task(self, task, reason):
+        """
+        Returns:
+            bool: True if postponed, False if too many tasks were postponed recently.
+        """
+        now = time.time()
+        self.postpone_times = [t for t in self.postpone_times if now - t < 3600] + [now]
+        if len(self.postpone_times) > MAX_POSTPONES_PER_HOUR:
+            logger.critical(f'{len(self.postpone_times)} tasks postponed within an hour, the problem is not one task')
+            return False
+        logger.critical(f'Task `{task}` {reason}')
+        logger.critical(f'Postpone `{task}` for {TASK_COOLDOWN_MINUTES} minutes and continue with other tasks')
+        handle_notify(
+            self.config.Error_OnePushConfig,
+            title=f"Alas <{self.config_name}> postponed {task}",
+            content=f"<{self.config_name}> Task `{task}` {reason}. Retrying in {TASK_COOLDOWN_MINUTES} minutes.",
+        )
+        deep_set(self.failure_record, keys=task, value=0)
+        del_cached_property(self, 'config')
+        self.config.task_delay(minute=TASK_COOLDOWN_MINUTES, task=task)
+        del_cached_property(self, 'config')
+        self.checker.check_now()
+        return True
 
     def save_error_log(self):
         """
@@ -597,6 +655,14 @@ class AzurLaneAutoScript:
             failed = deep_get(self.failure_record, keys=task, default=0)
             failed = 0 if success else failed + 1
             deep_set(self.failure_record, keys=task, value=failed)
+            reason = self.postpone_reason
+            self.postpone_reason = None
+            if reason is None and failed >= 3 and task != 'Restart':
+                reason = 'failed 3 or more times'
+            if reason is not None:
+                if self.postpone_task(task, reason):
+                    continue
+                failed = max(failed, 3)
             if failed >= 3:
                 logger.critical(f"Task `{task}` failed 3 or more times.")
                 logger.critical("Possible reason #1: You haven't used it correctly. "

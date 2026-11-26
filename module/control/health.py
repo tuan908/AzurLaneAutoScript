@@ -8,9 +8,9 @@ Signals (per instance), from the worker process the server owns and its log:
 - idle           the worker runs and waits for its next task (healthy)
 - ok / stopped   healthy
 
-Recovery is opt-in per instance (policy in config/control.yaml):
-- autoRestart     restart a crashed worker
-- restartOnStall  restart a stalled worker
+Recovery per instance (policy in config/control.yaml):
+- autoRestart     restart a crashed worker (on by default)
+- restartOnStall  restart a stalled worker (off by default)
 Restarts back off (30s, 2min, 5min) and stop after `maxRestartsPerHour`; the instance is then
 marked gaveUp until someone starts it again. Deliberate stops, natural finishes and updates are
 never treated as failures. Recovery that Alas already does inside the worker (game restart on
@@ -27,7 +27,7 @@ from module.exception import HUMAN_TAKEOVER_EXIT_CODE
 from module.logger import logger
 
 POLICY_FILE = "./config/control.yaml"
-DEFAULT_INSTANCE_POLICY = {"autoRestart": False, "restartOnStall": False, "stallMinutes": 30}
+DEFAULT_INSTANCE_POLICY = {"autoRestart": True, "restartOnStall": False, "stallMinutes": 30}
 DEFAULT_POLICY = {
     "maxRestartsPerHour": 3,
     "backoffSeconds": [30, 120, 300],

@@ -103,8 +103,9 @@ def test_takeover_of_an_earlier_run_does_not_count(env):
     assert {e["reason"] for e in monitor.snapshot()["history"]} == {"crashed"}
 
 
-def test_no_recovery_unless_enabled(env):
+def test_no_recovery_when_disabled(env):
     clock, service, policy, monitor = env
+    policy.update({"instances": {"alas": {"autoRestart": False}}})
     service.set("alas", "failed")
     for _ in range(5):
         monitor.tick()
@@ -218,7 +219,7 @@ def test_policy_validation_and_persistence(env, tmp_path):
     policy.update({"instances": {"alas": {"stallMinutes": 45}}})
     again = PolicyStore(policy.path)
     assert again.instance("alas") == {"autoRestart": True, "restartOnStall": False, "stallMinutes": 45}
-    assert again.instance("other")["autoRestart"] is False
+    assert again.instance("other")["autoRestart"] is True
 
 
 def test_checks(env):
