@@ -82,7 +82,7 @@ export function Workspace({ status, children }: { status: InstanceStatus; childr
           ))}
         </nav>
       </div>
-      <div className="flex min-w-0 flex-col gap-4 px-4 pt-5 pb-10 min-[861px]:px-6">
+      <div className="flex min-w-0 flex-1 flex-col gap-4 px-4 pt-5 pb-10 min-[861px]:px-6 has-data-fill-height:min-h-0 has-data-fill-height:pb-4">
         <WorkspaceBanners status={status} commandError={command.error} />
         <WorkspaceStatus value={status}>{children}</WorkspaceStatus>
       </div>

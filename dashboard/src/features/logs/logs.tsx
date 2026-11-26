@@ -80,7 +80,10 @@ export function Logs() {
   };
 
   return (
-    <section className="flex min-h-0 flex-col overflow-hidden rounded-alas border border-edge bg-terminal shadow-alas">
+    <section
+      data-fill-height
+      className="flex min-h-0 flex-col overflow-hidden min-[861px]:flex-1 rounded-alas border border-edge bg-terminal shadow-alas"
+    >
       <div className="flex flex-wrap items-center gap-2 border-b border-[#1d2330] bg-[#121620] px-2.5 py-2 text-terminal-dim [&_input:not([type=checkbox])]:w-55 [&_input:not([type=checkbox])]:min-h-7 [&_input:not([type=checkbox])]:border-[#262d3b] [&_input:not([type=checkbox])]:bg-[#0b0e14] [&_input:not([type=checkbox])]:text-[12.5px] [&_input:not([type=checkbox])]:text-terminal-text [&_label]:inline-flex [&_label]:items-center [&_label]:gap-1.5 [&_label]:text-xs max-[600px]:[&_input:not([type=checkbox])]:w-full">
         <Input
           aria-label="Filter logs"
@@ -121,7 +124,7 @@ export function Logs() {
         </span>
       </div>
       <div
-        className="relative overflow-auto py-2 font-code text-xs leading-relaxed text-terminal-text focus-visible:-outline-offset-2 h-[70vh] min-h-90 min-[861px]:h-[calc(100vh-230px)]"
+        className="relative overflow-auto py-2 font-code text-xs leading-relaxed text-terminal-text focus-visible:-outline-offset-2 h-[70vh] min-h-90 min-[861px]:h-auto min-[861px]:flex-1"
         ref={scrollRegion}
         role="region"
         aria-label="Recent log lines"

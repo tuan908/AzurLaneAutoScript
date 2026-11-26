@@ -84,7 +84,7 @@ export function App() {
         ref={mainContent}
         id="dashboard-content"
         tabIndex={-1}
-        className="flex min-h-0 min-w-0 flex-col focus-visible:-outline-offset-2 min-[861px]:overflow-y-auto"
+        className="relative flex min-h-0 min-w-0 flex-col focus-visible:-outline-offset-2 min-[861px]:overflow-y-auto"
       >
         {ready ? (
           <Outlet />
