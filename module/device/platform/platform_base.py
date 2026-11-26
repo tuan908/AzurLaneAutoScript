@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from module.base.decorator import cached_property, del_cached_property
 from module.device.connection import Connection
 from module.device.method.utils import get_serial_pair
+from module.device.platform.serial_fallback import fallback_instance
 from module.device.platform.emulator_base import EmulatorInstanceBase, EmulatorManagerBase, remove_duplicated_path
 from module.logger import logger
 from module.map.map_grids import SelectedGrids
@@ -160,7 +161,13 @@ class PlatformBase(Connection, EmulatorManagerBase):
         select = instances.select(**search_args)
         if select.count == 0:
             logger.warning(f'No emulator instance with {search_args}, serial invalid')
-            return None
+            instance = fallback_instance(instances, name=name, path=path, emulator=emulator)
+            if instance is None:
+                return None
+            logger.warning(f'Using {instance} instead, saving its serial "{instance.serial}"')
+            self.config.Emulator_Serial = instance.serial
+            self.serial = instance.serial
+            return instance
         if select.count == 1:
             instance = select[0]
             logger.hr('Emulator instance', level=2)

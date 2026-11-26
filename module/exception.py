@@ -73,5 +73,10 @@ class RequestHumanTakeover(Exception):
     pass
 
 
+class EmulatorNotFound(RequestHumanTakeover):
+    # No emulator matches the configured serial: a setup problem a restart cannot fix
+    pass
+
+
 class HardNotSatisfied(RequestHumanTakeover):
     pass

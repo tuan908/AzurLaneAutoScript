@@ -93,20 +93,33 @@ def test_task_level_takeover_postpones_only_that_task(alas):
     assert ("delay", "Main", alas_module.TASK_COOLDOWN_MINUTES) in log
 
 
-def test_device_takeover_still_stops(alas):
-    alas_module, make, log = alas
-    code = compile("def device_fails():\n    raise RequestHumanTakeover\n", "module/device/connection.py", "exec")
-    scope = {"RequestHumanTakeover": alas_module.RequestHumanTakeover}
+def raise_from(alas_module, filename, error):
+    code = compile("def fail():\n    raise error\n", filename, "exec")
+    scope = {"error": error}
     exec(code, scope)
     try:
-        scope["device_fails"]()
-    except alas_module.RequestHumanTakeover as error:
-        device_error = error
-    script_alas = make([("Main", device_error)])
+        scope["fail"]()
+    except alas_module.RequestHumanTakeover as raised:
+        return raised
+
+
+def test_lost_emulator_exits_as_a_crash_for_auto_restart(alas):
+    alas_module, make, log = alas
+    error = raise_from(alas_module, "module/device/method/adb.py", alas_module.RequestHumanTakeover())
+    script_alas = make([("Main", error)])
+    with pytest.raises(SystemExit) as stop:
+        loop_until_done(script_alas)
+    assert stop.value.code == 1
+    assert not any(entry[0] == "delay" for entry in log)
+
+
+def test_emulator_not_found_still_asks_for_a_human(alas):
+    alas_module, make, log = alas
+    error = raise_from(alas_module, "module/device/device.py", alas_module.EmulatorNotFound())
+    script_alas = make([("Main", error)])
     with pytest.raises(SystemExit) as stop:
         loop_until_done(script_alas)
     assert stop.value.code == alas_module.HUMAN_TAKEOVER_EXIT_CODE
-    assert not any(entry[0] == "delay" for entry in log)
 
 
 def test_many_postpones_in_an_hour_ask_for_a_human(alas):

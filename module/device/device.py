@@ -16,8 +16,8 @@ from module.device.app_control import AppControl
 from module.device.control import Control
 from module.device.input import Input
 from module.device.screenshot import Screenshot
-from module.exception import (EmulatorNotRunningError, GameNotRunningError, GameStuckError, GameTooManyClickError,
-                              RequestHumanTakeover)
+from module.exception import (EmulatorNotFound, EmulatorNotRunningError, GameNotRunningError, GameStuckError,
+                              GameTooManyClickError, RequestHumanTakeover)
 from module.handler.assets import GET_MISSION
 from module.logger import logger
 
@@ -87,7 +87,7 @@ class Device(Screenshot, Control, AppControl, Input):
                         f'No emulator with serial "{self.config.Emulator_Serial}" found, '
                         f'please set a correct serial'
                     )
-                    raise RequestHumanTakeover
+                    raise EmulatorNotFound
 
         # Auto-fill emulator info
         if IS_WINDOWS and self.config.EmulatorInfo_Emulator == 'auto':

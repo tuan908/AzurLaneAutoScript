@@ -42,7 +42,7 @@ export function WorkspaceBanners({
     items.push({
       tone: "bad",
       title: "Alas needs you",
-      body: "It stopped and asked for a person (for example a task failed 3 times, or the emulator is not reachable). Check the log, fix the cause, then start it again.",
+      body: "It stopped and asked for a person (for example no emulator matches the serial in Settings, or too many tasks failed within an hour). Check the log, fix the cause, then start it again.",
       links: [toLogs],
     });
   else if (h?.recovery.gaveUp)

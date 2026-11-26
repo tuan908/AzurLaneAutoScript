@@ -23,6 +23,7 @@ MAX_POSTPONES_PER_HOUR = 3
 # Code under these folders talks to the emulator or logs in: its takeovers affect every task.
 GLOBAL_TAKEOVER_PATHS = ('module/device/', 'module/handler/login', 'module/daemon/')
 LOGIN_PATHS = ('module/handler/login',)
+DEVICE_PATHS = ('module/device/',)
 
 
 def raised_under(error, paths):
@@ -72,7 +73,9 @@ class AzurLaneAutoScript:
             from module.device.device import Device
             device = Device(config=self.config)
             return device
-        except RequestHumanTakeover:
+        except RequestHumanTakeover as e:
+            if not isinstance(e, EmulatorNotFound):
+                self.exit_device_lost()
             logger.critical('Request human takeover')
             exit(HUMAN_TAKEOVER_EXIT_CODE)
         except Exception as e:
@@ -153,6 +156,8 @@ class AzurLaneAutoScript:
         except RequestHumanTakeover as e:
             if raised_under(e, LOGIN_PATHS):
                 self.exit_retry_later('The game could not log in')
+            if raised_under(e, DEVICE_PATHS) and not isinstance(e, EmulatorNotFound):
+                self.exit_device_lost()
             if command != 'restart' and not is_global_takeover(e):
                 self.postpone_reason = 'needs your attention, see the messages above'
                 return False
@@ -196,6 +201,13 @@ class AzurLaneAutoScript:
         del_cached_property(self, 'config')
         self.checker.check_now()
         return True
+
+    def exit_device_lost(self):
+        # A crash exit, not a takeover: the control server restarts Alas with a fresh connection,
+        # and Device starts the emulator if it is not running. Bounded by maxRestartsPerHour.
+        logger.error('Lost the emulator connection')
+        logger.warning('Exiting so the control server can start Alas again and reconnect')
+        exit(1)
 
     def exit_retry_later(self, reason):
         logger.critical(f'{reason}, the server may be under maintenance or the game needs an update')
