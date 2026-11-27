@@ -10,7 +10,7 @@ fi
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.."
 source_root="$(pwd -P)"
 target="$(realpath -e -- "${1:-/mnt/d/alas-modernize}")"
-if [[ "$target/" == "$source_root/"* || ! -f "$target/gui.py" ]]; then
+if [[ "$target/" == "$source_root/"* || ! -f "$target/alas.py" ]]; then
     printf 'Choose a separate ALAS installation as the target.\n' >&2
     exit 2
 fi
@@ -32,6 +32,8 @@ fi
     bun run build
 )
 test -f dashboard/dist/index.html
+alasd/build.sh
+test -f alasd/bin/alasd.exe
 
 target_windows="$(wslpath -w "$target")"
 session="$(mktemp -d)"
@@ -72,7 +74,8 @@ control stop
 {
     git ls-files -z -- ':!dashboard/dist'
     find dashboard/dist -type f -print0
+    printf 'alasd/bin/alasd.exe\0'
 } | rsync --recursive --from0 --files-from=- --checksum --ignore-missing-args \
     --backup --backup-dir="$backup" --delay-updates -- ./ "$target/"
 
-printf 'Synced ALAS and the dashboard build to %s\n' "$target"
+printf 'Synced ALAS, the dashboard build and alasd.exe to %s\n' "$target"

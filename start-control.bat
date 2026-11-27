@@ -41,7 +41,12 @@ if not exist "dashboard\dist\index.html" (
     )
     popd
 )
+if not exist "alasd\bin\alasd.exe" (
+    echo alasd\bin\alasd.exe is missing. Build it with alasd/build.sh on the development machine and copy it here.
+    exit /b 1
+)
 rem .venv first so `python` is 3.15. Git and adb (AdbExecutable in deploy.yaml) still come from the
 rem toolkit, its adbutils is the same 0.11.0 as in .venv so both use the same adb server version.
 set "PATH=%~dp0.venv\Scripts;%~dp0toolkit\alias;%~dp0toolkit\command;%~dp0toolkit\Git\mingw64\bin;%~dp0toolkit\Lib\site-packages\adbutils\binaries;%PATH%"
-".venv\Scripts\python.exe" control_server.py %*
+rem The Go control server owns the Python workers, see alasd/
+"alasd\bin\alasd.exe" %*

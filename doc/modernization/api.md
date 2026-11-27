@@ -1,12 +1,16 @@
 # Control API
 
-The legacy and headless servers build the same `ControlApi` over a single in-process
-`ProcessManager` registry. Both use the existing Starlette runtime. Pydantic models describe
-the OpenAPI response contracts using the version already present in the toolkit. Visit
-`/api/v1/openapi.json` for the schema. From the repository root:
+The Go control server `alasd` (alasd/) serves the API at `/api/v1` and the dashboard at
+`/dashboard`. It owns one Python worker process per running instance
+(`python -m module.control.worker <instance> <func>`, JSON log lines on stdout, `stop` on
+stdin) and asks a long-lived Python sidecar (`python -m module.control.sidecar`) for
+everything that needs the Alas config code: schema, config read and update, profile creation
+and the task queue.
+
+`dashboard/openapi.json` is the contract. It is maintained by hand now; a Go test
+(`TestRoutesMatchOpenAPI`) fails when a route and the document disagree. After changing it:
 
 ```sh
-uv run -m dev_tools.export_openapi
 cd dashboard && bun run gen:api
 ```
 

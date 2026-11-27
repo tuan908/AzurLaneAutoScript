@@ -34,9 +34,6 @@ dependencies = [
     "pyyaml>=6",
     "inflection>=0.5",
     "pydantic>=2.14",
-    "aiofiles>=25",
-    "prettytable>=3.19",
-    "anyio>=4.16",
     "filelock>=3.20,<4",
     "requests>=2.34",
     "cached-property>=1.5",
@@ -44,18 +41,12 @@ dependencies = [
     # Pushing
     "onepush>=1.11",
     "pycryptodome>=4.6",
-    "pypresence>=4.6",
-    # Webui and control server
-    "pywebio>=1.8.4",
-    "starlette>=1.10",
-    "uvicorn[standard]>=0.54",
     "pywin32>=312; sys_platform == 'win32'",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=9",
-    "httpx2>=2.16.2",
 ]
 
 [tool.uv]

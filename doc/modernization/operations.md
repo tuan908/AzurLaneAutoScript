@@ -27,7 +27,10 @@ Press Ctrl+C in a visible launcher window for a graceful shutdown. For a manual 
 stop any running profiles from the dashboard before ending the server in Task Manager. Closing the browser leaves the
 worker running. The headless server honors the ALAS deploy password and startup profiles.
 The API uses the password as a bearer token when configured. The launcher always binds to
-127.0.0.1. Use `gui.py` if you need PyWebIO or its updater.
+127.0.0.1. The PyWebIO GUI (`gui.py`) and its updater are gone; the dashboard is the only UI.
+
+`start-control.bat` runs `uv sync` and then `alasd\bin\alasd.exe`, the Go control server.
+Build it in WSL with `alasd/build.sh`; `deploy/Windows/sync-from-wsl.sh` builds and copies it.
 
 ## Optional Windows startup task
 
@@ -57,11 +60,12 @@ and latency on an isolated no-password control server with:
 
 ## Fake-worker browser smoke
 
-Use a separate copy of the checkout with the Windows toolkit, the template config, and a
-built dashboard. The smoke creates a profile in that copy.
+Use a separate copy of the checkout with the template config and a built dashboard. The
+smoke creates profiles in that copy. `--fake-workers` runs `dev_tools/fake_worker.py`
+instead of Alas; the config sidecar is the real one.
 
-```bat
-.venv\Scripts\python.exe -m dev_tools.smoke_control_runtime
+```sh
+alasd/bin/alasd --port 22368 --fake-workers
 ```
 
 From `dashboard/` in WSL, run the test against that server:

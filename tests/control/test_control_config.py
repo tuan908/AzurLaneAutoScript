@@ -1,14 +1,11 @@
+import io
 import json
 import os
 
 import pytest
-from starlette.applications import Starlette
-from starlette.testclient import TestClient
-
-from module.control.api import ControlApi, mount_control_api
 from module.control.configuration import (EDITABLE_TYPES, ConfigConflict, ConfigInvalid, ConfigService,
                                           ConfigUnsupported)
-from module.control.instances import InstanceService
+from module.control.sidecar import Handlers, serve
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -208,55 +205,49 @@ def test_mod_instances_unsupported(files):
         make_service(files, mod="fpy").schema("alas")
 
 
-# ---------------------------------------------------------------- HTTP
+# ---------------------------------------------------------------- sidecar protocol
 
 
-class _AsLoopback:
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] == "http":
-            scope = dict(scope, client=("127.0.0.1", 50000))
-        await self.app(scope, receive, send)
+class FakeHandlers(Handlers):
+    def __init__(self, config):
+        self.config = config
 
 
 @pytest.fixture
-def client(files):
-    service = InstanceService(list_instances=lambda: ["alas"], get_manager=lambda name: None,
-                              default_func=lambda name: "alas")
-    app = Starlette()
-    mount_control_api(app, ControlApi(service, config=make_service(files)))
-    return TestClient(_AsLoopback(app), base_url="http://127.0.0.1:22267")
+def call(files):
+    """One JSON-lines request to the sidecar, as alasd sends it"""
+    handlers = FakeHandlers(make_service(files))
+
+    def call(method, **params):
+        out = io.StringIO()
+        serve(io.StringIO(json.dumps({"id": 7, "method": method, "params": params}) + "\n"), out, handlers)
+        response = json.loads(out.getvalue())
+        assert response["id"] == 7
+        return response
+
+    return call
 
 
-def test_http_schema_and_read(client):
-    schema = client.get("/api/v1/instances/alas/config/schema?lang=en-US")
-    assert schema.status_code == 200
-    assert schema.json()["menus"]
-    assert client.get("/api/v1/instances/alas/config/schema?lang=../x").status_code == 400
-    assert client.get("/api/v1/instances/nope/config").status_code == 404
-    assert "revision" in client.get("/api/v1/instances/alas/config").json()
-    assert client.get("/api/v1/config/schema").json()["menus"]
+def test_sidecar_schema_and_read(call):
+    assert call("schema", instance="alas", lang="en-US")["result"]["menus"]
+    assert "revision" in call("read", instance="alas")["result"]
 
 
-def test_http_patch_flow(client):
-    revision = client.get("/api/v1/instances/alas/config").json()["revision"]
-    body = {"revision": revision, "changes": {"Alas.Emulator.Serial": "127.0.0.1:16384"}}
+def test_sidecar_update_flow(call):
+    revision = call("read", instance="alas")["result"]["revision"]
+    changes = {"Alas.Emulator.Serial": "127.0.0.1:16384"}
+    ok = call("update", instance="alas", revision=revision, changes=changes)["result"]
+    assert ok["applied"] == changes
 
-    assert client.patch("/api/v1/instances/alas/config", content=json.dumps(body)).status_code == 415
+    stale = call("update", instance="alas", revision=revision, changes=changes)["error"]
+    assert stale["type"] == "ConfigConflict" and stale["revision"] == ok["revision"]
 
-    ok = client.patch("/api/v1/instances/alas/config", json=body)
-    assert ok.status_code == 200
-    assert ok.json()["applied"] == {"Alas.Emulator.Serial": "127.0.0.1:16384"}
+    bad = call("update", instance="alas", revision=ok["revision"], changes={"Alas.Emulator.PackageName": "nope"})
+    assert bad["error"]["type"] == "ConfigInvalid"
+    assert "Alas.Emulator.PackageName" in bad["error"]["errors"]
 
-    stale = client.patch("/api/v1/instances/alas/config", json=body)
-    assert stale.status_code == 409
-    assert stale.json()["revision"] == ok.json()["revision"]
 
-    bad = client.patch("/api/v1/instances/alas/config", json={
-        "revision": ok.json()["revision"], "changes": {"Alas.Emulator.PackageName": "nope"}})
-    assert bad.status_code == 400
-    assert "Alas.Emulator.PackageName" in bad.json()["fields"]
-
-    assert client.patch("/api/v1/instances/alas/config", json={"changes": {}}).status_code == 400
+def test_sidecar_refuses_private_and_unknown_methods(call):
+    assert call("read_raw", name="alas")["error"]["type"] == "ValueError"
+    assert call("_nope")["error"]["type"] == "ValueError"
+    assert call("nope")["error"]["type"] == "ValueError"

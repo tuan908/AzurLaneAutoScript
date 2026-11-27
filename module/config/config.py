@@ -4,11 +4,9 @@ import os
 import threading
 from datetime import datetime, timedelta
 
-import pywebio
-
 from module.base.filter import Filter
 from module.config.config_generated import GeneratedConfig
-from module.config.config_manual import ManualConfig, OutputConfig
+from module.config.config_manual import ManualConfig
 from module.config.config_updater import ConfigUpdater, ensure_time, get_server_next_update, nearest_future
 from module.config.deep import deep_get, deep_set
 from module.config.lock import config_lock
@@ -764,10 +762,6 @@ class AzurLaneConfig(ConfigUpdater, ManualConfig, GeneratedConfig, ConfigWatcher
         backup = ConfigBackup(config=self)
         backup.cover(**kwargs)
         return backup
-
-
-pywebio.output.Output = OutputConfig
-pywebio.pin.Output = OutputConfig
 
 
 class ConfigBackup:

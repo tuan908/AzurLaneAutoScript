@@ -93,15 +93,13 @@ def test_other_process_soft_lock_continues_without(other_process):
         assert locked is False
 
 
-def test_api_returns_503_while_locked(other_process, tmp_path):
+def test_sidecar_reports_lock_timeout(other_process, tmp_path):
+    """alasd answers 503 config_busy for ConfigLockTimeout"""
+    import io
     import json
 
-    from starlette.applications import Starlette
-    from starlette.testclient import TestClient
-
-    from module.control.api import ControlApi, mount_control_api
     from module.control.configuration import ConfigService
-    from module.control.instances import InstanceService
+    from module.control.sidecar import Handlers, serve
 
     path = tmp_path / "alas.json"
     path.write_text(json.dumps({"Alas": {"Emulator": {"Serial": "auto"}}}))
@@ -116,30 +114,20 @@ def test_api_returns_503_while_locked(other_process, tmp_path):
         write_config=lambda name, data: path.write_text(json.dumps(data)),
         lock=lambda name: config_lock(name, timeout=0.3, required=True),
     )
-    service = InstanceService(list_instances=lambda: ["alas"], get_manager=lambda name: None,
-                              default_func=lambda name: "alas")
-    app = Starlette()
-    mount_control_api(app, ControlApi(service, config=config))
 
-    class AsLoopback:
-        async def __call__(self, scope, receive, send):
-            if scope["type"] == "http":
-                scope = dict(scope, client=("127.0.0.1", 50000))
-            await app(scope, receive, send)
+    class FakeHandlers(Handlers):
+        def __init__(self):
+            self.config = config
 
-    client = TestClient(AsLoopback(), base_url="http://127.0.0.1:22267")
     from hashlib import sha256
-
-    assert client.get("/api/v1/instances/alas/config").status_code == 503
     revision = sha256(path.read_bytes()).hexdigest()[:16]
-    body = {"revision": revision, "changes": {"Alas.Emulator.Serial": "x:1"}}
-    busy = client.patch("/api/v1/instances/alas/config", json=body)
-    assert busy.status_code == 503
-    assert busy.json()["error"]["code"] == "config_busy"
+    requests = [
+        {"id": 1, "method": "read", "params": {"instance": "alas"}},
+        {"id": 2, "method": "update", "params": {"instance": "alas", "revision": revision,
+                                                "changes": {"Alas.Emulator.Serial": "x:1"}}},
+    ]
+    out = io.StringIO()
+    serve(io.StringIO("".join(json.dumps(r) + "\n" for r in requests)), out, FakeHandlers())
+    responses = [json.loads(line) for line in out.getvalue().splitlines()]
+    assert [r["error"]["type"] for r in responses] == ["ConfigLockTimeout", "ConfigLockTimeout"]
     assert json.loads(path.read_text())["Alas"]["Emulator"]["Serial"] == "auto"
-
-    other_process.set()
-    time.sleep(0.5)
-    ok = client.patch("/api/v1/instances/alas/config", json=body)
-    assert ok.status_code == 200
-    assert json.loads(path.read_text())["Alas"]["Emulator"]["Serial"] == "x:1"
