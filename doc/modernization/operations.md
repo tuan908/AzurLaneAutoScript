@@ -52,7 +52,7 @@ the renderer blanks, devices disconnect or a worker stops. The probe can sample 
 and latency on an isolated no-password control server with:
 
 ```bat
-toolkit\python.exe dev_tools\soak_probe.py --url http://127.0.0.1:22267/api/v1/health/details --out log\soak-final.csv --interval 60 --duration 259200
+.venv\Scripts\python.exe dev_tools\soak_probe.py --url http://127.0.0.1:22267/api/v1/health/details --out log\soak-final.csv --interval 60 --duration 259200
 ```
 
 ## Fake-worker browser smoke
@@ -61,7 +61,7 @@ Use a separate copy of the checkout with the Windows toolkit, the template confi
 built dashboard. The smoke creates a profile in that copy.
 
 ```bat
-toolkit\python.exe -m dev_tools.smoke_control_runtime
+.venv\Scripts\python.exe -m dev_tools.smoke_control_runtime
 ```
 
 From `dashboard/` in WSL, run the test against that server:

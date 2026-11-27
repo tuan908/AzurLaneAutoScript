@@ -6,37 +6,73 @@ from PIL import Image
 
 from module.exception import RequestHumanTakeover
 from module.logger import logger
+from module.ocr.crnn import CrnnModel
 
-logger.info('Loading OCR dependencies')
-from cnocr import CnOcr
-from cnocr.cn_ocr import (check_model_name, data_dir, gen_network, load_module,
-                          read_charset)
-from cnocr.fit.ctc_metrics import CtcMetrics
-from cnocr.hyperparams.cn_hyperparams import CnHyperparams as Hyperparams
-from module.device.pkg_resources import PACKAGE_CACHE
+MODEL_FILE_PREFIX = 'cnocr-v1.2.0'
+IMG_HEIGHT = 32
+# densenet models shrink the width by 4 before the GRU
+SEQ_LEN_CMPR_RATIO = 4
 
 
-def get_mxnet_context():
-    for dist in PACKAGE_CACHE.dict_installed_packages.values():
-        # mxnet_cu101
-        if dist.dist.startswith('mxnet_cu'):
-            logger.info(f'MXNet gpu package: {dist.dist}=={dist.version} found, using it')
-            return 'gpu'
+def _limit_blas_threads():
+    """
+    The OCR inputs are tiny, a multi-threaded BLAS spends more time waking its
+    threads than computing (100ms vs 18ms per image), and several ALAS instances
+    run side by side anyway.
+    """
+    try:
+        from threadpoolctl import threadpool_limits
+        threadpool_limits(limits=1, user_api='blas')
+    except Exception as e:
+        logger.warning(f'Failed to limit BLAS threads: {e}')
 
-    return 'cpu'
+
+def read_charset(charset_fp):
+    alphabet = [None]
+    # Index 0 is the CTC blank
+    with open(charset_fp, encoding='utf-8') as fp:
+        for line in fp:
+            alphabet.append(line.rstrip('\n'))
+    try:
+        space_idx = alphabet.index('<space>')
+        alphabet[space_idx] = ' '
+    except ValueError:
+        pass
+    inv_alph_dict = {_char: idx for idx, _char in enumerate(alphabet)}
+    return alphabet, inv_alph_dict
 
 
-class AlOcr(CnOcr):
-    # 'cpu' or 'gpu'
-    # To use predict in gpu, the gpu version of mxnet must be installed.
-    CNOCR_CONTEXT = get_mxnet_context()
+def ctc_label(p):
+    """
+    Collapse a CTC path: drop blanks (0) and repeats.
+
+    Args:
+        p (list[int]):
+
+    Returns:
+        list[int]:
+    """
+    ret = []
+    prev = 0
+    for c in p:
+        if c != 0 and c != prev:
+            ret.append(c)
+        prev = c
+    return ret
+
+
+class AlOcr:
+    """
+    Recognizer of single text lines, the cnocr 1.2 `CnOcr` API on top of a numpy
+    CRNN, so it runs on any Python without MXNet.
+    """
 
     def __init__(
             self,
             model_name='densenet-lite-gru',
             model_epoch=None,
             cand_alphabet=None,
-            root=data_dir(),
+            root='',
             context='cpu',
             name=None,
     ):
@@ -47,71 +83,76 @@ class AlOcr(CnOcr):
              model_name='densenet-lite-gru',
              model_epoch=None,
              cand_alphabet=None,
-             root=data_dir(),
+             root='',
              context='cpu',
              name=None,
              ):
-        """
-
-        :param model_name: 模型名称
-        :param model_epoch: 模型迭代次数
-        :param cand_alphabet: 待识别字符所在的候选集合。默认为 `None`，表示不限定识别字符范围
-        :param root: 模型文件所在的根目录。
-            Linux/Mac下默认值为 `~/.cnocr`，表示模型文件所处文件夹类似 `~/.cnocr/1.1.0/conv-lite-fc-0027`。
-            Windows下默认值为 ``。
-        :param context: 'cpu', or 'gpu'。表明预测时是使用CPU还是GPU。默认为CPU。
-        :param name: 正在初始化的这个实例名称。如果需要同时初始化多个实例，需要为不同的实例指定不同的名称。
-        """
-        check_model_name(model_name)
         self._model_name = model_name
-        self._model_file_prefix = '{}-{}'.format(self.MODEL_FILE_PREFIX, model_name)
+        self._model_file_prefix = '{}-{}'.format(MODEL_FILE_PREFIX, model_name)
         self._model_epoch = model_epoch
-
-        self._model_dir = root  # Change folder structure.
+        self._model_dir = root
         self._assert_and_prepare_model_files()
-        self._alphabet, self._inv_alph_dict = read_charset(
-            os.path.join(self._model_dir, 'label_cn.txt')
-        )
-
+        self._alphabet, self._inv_alph_dict = read_charset(os.path.join(self._model_dir, 'label_cn.txt'))
         self._cand_alph_idx = None
-        # Alphabet will be set before calling ocr.
-        # self.set_cand_alphabet(cand_alphabet)
+        _limit_blas_threads()
+        logger.info('Loading OCR model: %s' % self._model_dir)
+        prefix = os.path.join(self._model_dir, self._model_file_prefix)
+        self._model = CrnnModel(
+            symbol_file='%s-symbol.json' % prefix,
+            params_file='%s-%04d.params' % (prefix, self._model_epoch),
+        )
+        self._model_loaded = True
 
-        self._hp = Hyperparams()
-        self._hp._loss_type = None  # infer mode
-        self._hp._num_classes = len(self._alphabet)
-        # 传入''的话，也改成传入None
-        self._net_prefix = None if name == '' else name
-
-        self._mod = self._get_module(AlOcr.CNOCR_CONTEXT)
+    def _ensure_loaded(self):
+        if not self._model_loaded:
+            self.init(*self._args)
 
     def ocr(self, img_fp):
-        if not self._model_loaded:
-            self.init(*self._args)
-            self._model_loaded = True
+        """
+        Treat the whole image as one line.
 
-        return super().ocr(img_fp)
+        Returns:
+            list[list[str]]:
+        """
+        self._ensure_loaded()
+        if min(img_fp.shape[0], img_fp.shape[1]) < 2:
+            return []
+        return self.ocr_for_single_lines([img_fp])
 
     def ocr_for_single_line(self, img_fp):
-        if not self._model_loaded:
-            self.init(*self._args)
-            self._model_loaded = True
-
-        return super().ocr_for_single_line(img_fp)
+        self._ensure_loaded()
+        return self.ocr_for_single_lines([img_fp])[0]
 
     def ocr_for_single_lines(self, img_list):
-        if not self._model_loaded:
-            self.init(*self._args)
-            self._model_loaded = True
+        """
+        Args:
+            img_list (list[np.ndarray]): Line images, (height, width) or (height, width, 3), 0 to 255.
 
-        return super().ocr_for_single_lines(img_list)
+        Returns:
+            list[list[str]]: Such as [['第', '一', '行'], ['第', '二', '行']]
+        """
+        self._ensure_loaded()
+        if len(img_list) == 0:
+            return []
+        img_list = [self._preprocess_img_array(img) for img in img_list]
+        batch_size = len(img_list)
+        img_list, img_widths = self._pad_arrays(img_list)
+
+        prob = self._model.forward(np.stack(img_list))
+        # [seq_len, batch_size, num_classes]
+        prob = np.reshape(prob, (-1, batch_size, prob.shape[1]))
+        if self._cand_alph_idx is not None:
+            prob = prob * self._gen_mask(prob.shape)
+
+        max_width = max(img_widths)
+        return [self._gen_line_pred_chars(prob[:, i, :], img_widths[i], max_width) for i in range(batch_size)]
 
     def set_cand_alphabet(self, cand_alphabet):
-        if not self._model_loaded:
-            self.init(*self._args)
-            self._model_loaded = True
-
-        return super().set_cand_alphabet(cand_alphabet)
+        self._ensure_loaded()
+        if cand_alphabet is None:
+            self._cand_alph_idx = None
+        else:
+            self._cand_alph_idx = sorted([0] + [self._inv_alph_dict[word] for word in cand_alphabet])
 
     """
     Atomic version of the OCR methods above
@@ -119,31 +160,16 @@ class AlOcr(CnOcr):
     """
 
     def atomic_ocr(self, img_fp, cand_alphabet=None):
-        if not self._model_loaded:
-            self.init(*self._args)
-            self._model_loaded = True
-
-        super().set_cand_alphabet(cand_alphabet)
-
-        return super().ocr(img_fp)
+        self.set_cand_alphabet(cand_alphabet)
+        return self.ocr(img_fp)
 
     def atomic_ocr_for_single_line(self, img_fp, cand_alphabet=None):
-        if not self._model_loaded:
-            self.init(*self._args)
-            self._model_loaded = True
-
-        super().set_cand_alphabet(cand_alphabet)
-
-        return super().ocr_for_single_line(img_fp)
+        self.set_cand_alphabet(cand_alphabet)
+        return self.ocr_for_single_line(img_fp)
 
     def atomic_ocr_for_single_lines(self, img_list, cand_alphabet=None):
-        if not self._model_loaded:
-            self.init(*self._args)
-            self._model_loaded = True
-
-        super().set_cand_alphabet(cand_alphabet)
-
-        return super().ocr_for_single_lines(img_list)
+        self.set_cand_alphabet(cand_alphabet)
+        return self.ocr_for_single_lines(img_list)
 
     def _assert_and_prepare_model_files(self):
         model_dir = self._model_dir
@@ -152,85 +178,73 @@ class AlOcr(CnOcr):
             '%s-%04d.params' % (self._model_file_prefix, self._model_epoch),
             '%s-symbol.json' % self._model_file_prefix,
         ]
-        file_prepared = True
         for f in model_files:
-            f = os.path.join(model_dir, f)
-            if not os.path.exists(f):
-                file_prepared = False
+            if not os.path.exists(os.path.join(model_dir, f)):
                 logger.warning('can not find file %s', f)
-                break
+                logger.warning(f'Ocr model not prepared: {model_dir}')
+                logger.warning(f'Required files: {model_files}')
+                logger.critical('Please check if required files of pre-trained OCR model exist')
+                raise RequestHumanTakeover
 
-        if file_prepared:
-            return
+    def _gen_mask(self, prob_shape):
+        mask_shape = list(prob_shape)
+        mask_shape[1] = 1
+        mask = np.zeros(mask_shape, dtype='int8')
+        mask[:, :, self._cand_alph_idx] = 1
+        return mask
 
-        # Disable auto downloading cnocr models when model not found.
-        # get_model_file(model_dir)
-        logger.warning(f'Ocr model not prepared: {model_dir}')
-        logger.warning(f'Required files: {model_files}')
-        logger.critical('Please check if required files of pre-trained OCR model exist')
-        raise RequestHumanTakeover
-
-    def _get_module(self, context):
-        network, self._hp = gen_network(self._model_name, self._hp, self._net_prefix)
-        hp = self._hp
-        prefix = os.path.join(self._model_dir, self._model_file_prefix)
-        data_names = ['data']
-        data_shapes = [(data_names[0], (hp.batch_size, 1, hp.img_height, hp.img_width))]
-        logger.info('Loading OCR model: %s' % self._model_dir)  # Change log appearance.
-        mod = load_module(
-            prefix,
-            self._model_epoch,
-            data_names,
-            data_shapes,
-            network=network,
-            net_prefix=self._net_prefix,
-            context=context,
-        )
-        return mod
-
-    def _preprocess_img_array(self, img):
+    @staticmethod
+    def _preprocess_img_array(img):
         """
-        :param img: image array with type mx.nd.NDArray or np.ndarray,
-        with shape [height, width] or [height, width, channel].
-        channel should be 1 (gray image) or 3 (color image).
+        Args:
+            img (np.ndarray): (height, width) or (height, width, 3)
 
-        :return: np.ndarray, with shape (1, height, width)
+        Returns:
+            np.ndarray: (1, 32, new_width) float32 in [0, 1]
         """
+        if img.ndim == 3:
+            img = cv2.cvtColor(img.astype(np.uint8), cv2.COLOR_RGB2GRAY)
         # Resize image using `cv2.resize` instead of `mxnet.image.imresize`
-        new_width = int(round(self._hp.img_height / img.shape[0] * img.shape[1]))
-        img = cv2.resize(img, (new_width, self._hp.img_height))
-        img = np.expand_dims(img, 0).astype('float32') / 255.0
-        return img
+        new_width = int(round(IMG_HEIGHT / img.shape[0] * img.shape[1]))
+        img = cv2.resize(img, (new_width, IMG_HEIGHT))
+        return np.expand_dims(img, 0).astype('float32') / 255.0
+
+    @staticmethod
+    def _pad_arrays(img_list):
+        """Padding to make sure all the elements have the same width."""
+        img_widths = [img.shape[2] for img in img_list]
+        if len(img_list) <= 1:
+            return img_list, img_widths
+        max_width = max(img_widths)
+        padded = []
+        for img in img_list:
+            if img.shape[2] < max_width:
+                img = np.pad(img, ((0, 0), (0, 0), (0, max_width - img.shape[2])), 'constant', constant_values=0.0)
+            padded.append(img)
+        return padded, img_widths
 
     def _gen_line_pred_chars(self, line_prob, img_width, max_img_width):
         """
-        Get the predicted characters.
-        :param line_prob: with shape of [seq_length, num_classes]
-        :param img_width:
-        :param max_img_width:
-        :return:
+        Args:
+            line_prob: (seq_length, num_classes)
         """
         class_ids = np.argmax(line_prob, axis=-1)
-
         class_ids *= np.max(line_prob, axis=-1) > 0.5  # Delete low confidence result
 
         if img_width < max_img_width:
-            comp_ratio = self._hp.seq_len_cmpr_ratio
-            end_idx = img_width // comp_ratio
+            end_idx = img_width // SEQ_LEN_CMPR_RATIO
             if end_idx < len(class_ids):
                 class_ids[end_idx:] = 0
-        prediction, start_end_idx = CtcMetrics.ctc_label(class_ids.tolist())
+        prediction = ctc_label(class_ids.tolist())
         alphabet = self._alphabet
-        res = [alphabet[p] if alphabet[p] != '<space>' else ' ' for p in prediction]
-
-        return res
+        return [alphabet[p] if alphabet[p] != '<space>' else ' ' for p in prediction]
 
     def debug(self, img_list):
         """
         Args:
             img_list: List of numpy array, (height, width)
         """
-        self.init(*self._args)
+        self._ensure_loaded()
         img_list = [(self._preprocess_img_array(img) * 255.0).astype(np.uint8) for img in img_list]
         img_list, img_widths = self._pad_arrays(img_list)
         image = cv2.hconcat(img_list)[0, :, :]

@@ -6,7 +6,7 @@ the OpenAPI response contracts using the version already present in the toolkit.
 `/api/v1/openapi.json` for the schema. From the repository root:
 
 ```sh
-uv run --no-project --python 3.8 --with-requirements tests/control/requirements-test.txt -m dev_tools.export_openapi
+uv run -m dev_tools.export_openapi
 cd dashboard && bun run gen:api
 ```
 

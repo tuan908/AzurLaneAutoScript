@@ -5,6 +5,8 @@ import socket
 import time
 import typing as t
 
+# adbutils and uiautomator2 import pkg_resources, which setuptools no longer ships
+import module.device.pkg_resources  # noqa: F401
 import uiautomator2 as u2
 import uiautomator2cache
 from adbutils import AdbTimeout

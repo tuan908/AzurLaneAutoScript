@@ -346,7 +346,7 @@ def test_http_recovery_endpoints(env):
     assert ok.json()["policy"]["instances"]["alas"]["autoRestart"] is True
     bad = client.patch("/api/v1/recovery/policy", json={"maxRestartsPerHour": "many"})
     assert bad.status_code == 400
-    assert client.patch("/api/v1/recovery/policy", data="{}").status_code == 415
+    assert client.patch("/api/v1/recovery/policy", content="{}").status_code == 415
 
 
 def fail_login(service, clock):

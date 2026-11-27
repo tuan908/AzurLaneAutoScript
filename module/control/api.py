@@ -14,6 +14,7 @@ Access:
 """
 import asyncio
 import hmac
+import inspect
 import ipaddress
 import json
 import os
@@ -26,6 +27,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 from starlette.concurrency import run_in_threadpool
+from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, StreamingResponse
 from starlette.routing import Mount, Route
@@ -142,7 +144,7 @@ class ControlApi:
         return None
 
     def _guarded(self, handler):
-        if asyncio.iscoroutinefunction(handler):
+        if inspect.iscoroutinefunction(handler):
             @wraps(handler)
             async def async_endpoint(request: Request):
                 refused = self._refuse(request)
@@ -432,11 +434,22 @@ class EventStream(StreamingResponse):
 
 
 class DashboardFiles(StaticFiles):
+    async def _get_response(self, path, scope):
+        # Starlette >= 0.15 raises the 404 instead of returning it
+        try:
+            return await super().get_response(path, scope)
+        except HTTPException as e:
+            if e.status_code != 404:
+                raise
+            return None
+
     async def get_response(self, path, scope):
-        response = await super().get_response(path, scope)
+        response = await self._get_response(path, scope)
         accepts_html = "text/html" in Request(scope).headers.get("accept", "")
-        if response.status_code == 404 and accepts_html and path.split(os.sep)[0] != "assets":
-            response = await super().get_response("index.html", scope)
+        if (response is None or response.status_code == 404) and accepts_html and path.split(os.sep)[0] != "assets":
+            response = await self._get_response("index.html", scope)
+        if response is None:
+            raise HTTPException(status_code=404)
         if response.headers.get("content-type", "").startswith("text/html"):
             response.headers["Cache-Control"] = "no-cache"
         return response

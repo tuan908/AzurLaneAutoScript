@@ -2,7 +2,7 @@
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, StrictBool, StrictFloat, StrictInt, StrictStr
-from pydantic.schema import schema
+from pydantic.json_schema import models_json_schema
 from typing_extensions import Literal
 
 from module.control.api import API_PREFIX, API_VERSION, ControlApi
@@ -11,6 +11,8 @@ from module.control.api import API_PREFIX, API_VERSION, ControlApi
 InstanceState = Literal["stopped", "starting", "running", "stopping", "failed"]
 HealthState = Literal["ok", "idle", "stopped", "stalled", "crashed", "human_takeover", "waiting_retry", "unmanaged"]
 FieldKind = Literal["input", "select", "checkbox", "datetime", "textarea", "storage", "lock", "state"]
+# OpenAPI 3.0 `nullable: true`, see _openapi30()
+NULLABLE = {"nullable": True}
 
 
 class InstancePolicy(BaseModel):
@@ -22,8 +24,8 @@ class InstancePolicy(BaseModel):
 class InstanceRecovery(BaseModel):
     policy: InstancePolicy
     restartsLastHour: int
-    nextAttemptAt: Optional[str] = Field(..., nullable=True)
-    pendingReason: Optional[str] = Field(..., nullable=True)
+    nextAttemptAt: Optional[str] = Field(..., json_schema_extra=NULLABLE)
+    pendingReason: Optional[str] = Field(..., json_schema_extra=NULLABLE)
     gaveUp: bool
 
 
@@ -36,13 +38,13 @@ class InstanceHealth(BaseModel):
 class InstanceStatus(BaseModel):
     id: str
     state: InstanceState
-    processId: Optional[int] = Field(..., nullable=True)
-    startedAt: Optional[str] = Field(..., nullable=True)
-    stoppedAt: Optional[str] = Field(..., nullable=True)
-    exitCode: Optional[int] = Field(..., nullable=True)
-    currentTask: Optional[str] = Field(..., nullable=True)
-    lastActivityAt: Optional[str] = Field(..., nullable=True)
-    lastError: Optional[str] = Field(..., nullable=True)
+    processId: Optional[int] = Field(..., json_schema_extra=NULLABLE)
+    startedAt: Optional[str] = Field(..., json_schema_extra=NULLABLE)
+    stoppedAt: Optional[str] = Field(..., json_schema_extra=NULLABLE)
+    exitCode: Optional[int] = Field(..., json_schema_extra=NULLABLE)
+    currentTask: Optional[str] = Field(..., json_schema_extra=NULLABLE)
+    lastActivityAt: Optional[str] = Field(..., json_schema_extra=NULLABLE)
+    lastError: Optional[str] = Field(..., json_schema_extra=NULLABLE)
     legacyState: int
     revision: int
     runLogStartSeq: int
@@ -50,7 +52,7 @@ class InstanceStatus(BaseModel):
     unmanaged: bool
     taskSuccesses: int
     taskFailures: int
-    health: Optional[InstanceHealth] = Field(None, nullable=True)
+    health: Optional[InstanceHealth] = Field(None, json_schema_extra=NULLABLE)
 
 
 class Instances(BaseModel):
@@ -91,8 +93,8 @@ class Health(BaseModel):
     serverPid: int
     uptimeSeconds: float
     instances: InstanceCounts
-    logQueueManagerAlive: Optional[bool] = Field(None, nullable=True)
-    health: Optional[HealthChecks]
+    logQueueManagerAlive: Optional[bool] = Field(None, json_schema_extra=NULLABLE)
+    health: Optional[HealthChecks] = None
 
 
 class HealthDetails(Health):
@@ -102,7 +104,7 @@ class HealthDetails(Health):
 
 class Task(BaseModel):
     command: str
-    nextRun: Optional[str] = Field(..., nullable=True)
+    nextRun: Optional[str] = Field(..., json_schema_extra=NULLABLE)
 
 
 class Tasks(BaseModel):
@@ -125,7 +127,7 @@ ConfigValue = Union[StrictStr, StrictBool, StrictInt, StrictFloat]
 
 
 class ConfigOption(BaseModel):
-    value: Optional[ConfigValue] = Field(..., nullable=True)
+    value: Optional[ConfigValue] = Field(..., json_schema_extra=NULLABLE)
     label: str
 
 
@@ -134,11 +136,11 @@ class ConfigField(BaseModel):
     type: FieldKind
     label: str
     help: str
-    default: Optional[ConfigValue] = Field(..., nullable=True)
+    default: Optional[ConfigValue] = Field(..., json_schema_extra=NULLABLE)
     readOnly: bool
-    options: Optional[List[ConfigOption]]
+    options: Optional[List[ConfigOption]] = None
     validation: Optional[str] = Field(None, alias="validate")
-    valuetype: Optional[str]
+    valuetype: Optional[str] = None
 
 
 class ConfigGroup(BaseModel):
@@ -172,7 +174,7 @@ class ConfigDoc(BaseModel):
 
 
 class ConfigUpdate(BaseModel):
-    revision: Optional[str]
+    revision: Optional[str] = None
     changes: Dict[str, Optional[ConfigValue]]
 
 
@@ -182,15 +184,15 @@ class ConfigApplied(BaseModel):
 
 
 class PolicyOverride(BaseModel):
-    autoRestart: Optional[bool]
-    restartOnStall: Optional[bool]
-    stallMinutes: Optional[int]
+    autoRestart: Optional[bool] = None
+    restartOnStall: Optional[bool] = None
+    stallMinutes: Optional[int] = None
 
 
 class PolicyUpdate(BaseModel):
-    maxRestartsPerHour: Optional[int]
-    backoffSeconds: Optional[List[int]]
-    instances: Optional[Dict[str, PolicyOverride]]
+    maxRestartsPerHour: Optional[int] = None
+    backoffSeconds: Optional[List[int]] = None
+    instances: Optional[Dict[str, PolicyOverride]] = None
 
 
 class RecoveryPolicy(BaseModel):
@@ -218,7 +220,7 @@ class PolicyApplied(BaseModel):
 
 class ProfileCreate(BaseModel):
     id: str
-    source: Optional[str] = Field(None, nullable=True)
+    source: Optional[str] = Field(None, json_schema_extra=NULLABLE)
 
 
 RESPONSES = {
@@ -236,6 +238,38 @@ PARAMETERS = {
 }
 
 
+def _openapi30(node):
+    """
+    Write JSON schema of pydantic v2 in the OpenAPI 3.0 dialect that pydantic v1 produced
+    and the dashboard types are generated from: `nullable: true` instead of a
+    `null` type in anyOf, no `default: null`, no `additionalProperties: true`.
+    """
+    if isinstance(node, list):
+        return [_openapi30(item) for item in node]
+    if not isinstance(node, dict):
+        return node
+    node = {key: _openapi30(value) for key, value in node.items()}
+    variants = node.get("anyOf")
+    if variants is not None:
+        variants = [v for v in variants if v != {"type": "null"}]
+        if len(variants) == 1:
+            node.pop("anyOf")
+            node = {**variants[0], **node}
+        else:
+            node["anyOf"] = variants
+    if "default" in node and node["default"] is None:
+        node.pop("default")
+    if node.get("additionalProperties") is True:
+        node.pop("additionalProperties")
+    for name, prop in node.get("properties", {}).items():
+        if isinstance(prop, dict) and "$ref" in prop and len(prop) > 1:
+            # A $ref with siblings, as pydantic v1 wrote it
+            rest = {key: value for key, value in prop.items() if key != "$ref"}
+            node["properties"][name] = {
+                "allOf": [{"$ref": prop["$ref"]}], **rest, "title": name.replace("_", " ").title()}
+    return node
+
+
 def _ref(model):
     return {"$ref": "#/components/schemas/" + model.__name__}
 
@@ -244,7 +278,9 @@ def document(routes=None):
     if routes is None:
         routes = ControlApi(None, config=object(), monitor=object()).routes()
     models = list(dict.fromkeys(list(RESPONSES.values()) + list(REQUESTS.values())))
-    schemas = schema(models, ref_prefix="#/components/schemas/")["definitions"]
+    _, definitions = models_json_schema(
+        [(model, "serialization") for model in models], ref_template="#/components/schemas/{model}")
+    schemas = _openapi30(definitions["$defs"])
     paths = {}
     for route in routes:
         name = route.endpoint.__name__

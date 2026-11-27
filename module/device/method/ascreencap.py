@@ -2,6 +2,8 @@ import os
 import time
 from functools import wraps
 
+# adbutils and uiautomator2 import pkg_resources, which setuptools no longer ships
+import module.device.pkg_resources  # noqa: F401
 from adbutils.errors import AdbError
 
 from module.base.utils import *
@@ -156,7 +158,7 @@ class AScreenCap(Connection):
 
         _, uncompressed_size, _, width, height = compressed_data_header
         channel = 3
-        from lz4.block import decompress
+        from module.device.method.lz4_block import decompress
         data = decompress(raw_compressed_data[20:], uncompressed_size=uncompressed_size)
 
         image = np.frombuffer(data, dtype=np.uint8)
@@ -183,7 +185,7 @@ class AScreenCap(Connection):
         return image
 
     def __process_screenshot(self, screenshot):
-        from lz4.block import LZ4BlockError
+        from module.device.method.lz4_block import LZ4BlockError
         for method in self.__screenshot_method_fixed:
             try:
                 result = self.__load_screenshot(screenshot, method=method)

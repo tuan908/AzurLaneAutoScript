@@ -245,7 +245,7 @@ def _read_events(api, host="127.0.0.1:22267", client=("127.0.0.1", 50000), chunk
         await iterator.aclose()
         return response, out
 
-    return asyncio.get_event_loop().run_until_complete(run())
+    return asyncio.run(run())
 
 
 def _api(spawns):
@@ -287,7 +287,7 @@ def test_events_stream_status_then_logs(server):
         await iterator.aclose()
         return "".join(out)
 
-    joined = asyncio.get_event_loop().run_until_complete(run())
+    joined = asyncio.run(run())
     assert '"state": "running"' in joined
     assert "Scheduler: Start task `Commission`" in joined
 
@@ -317,7 +317,7 @@ def test_stream_finishes_during_shutdown(server):
         with pytest.raises(StopAsyncIteration):
             await iterator.__anext__()
 
-    asyncio.get_event_loop().run_until_complete(run())
+    asyncio.run(run())
 
 
 def test_dashboard_served_when_built(tmp_path, server):
@@ -327,7 +327,7 @@ def test_dashboard_served_when_built(tmp_path, server):
     app = Starlette(routes=[Route("/", lambda request: PlainTextResponse("pywebio"))])
     mount_control_api(app, _api(server.spawns), dashboard_dir=str(dist))
     client = TestClient(_AsClient(app, "127.0.0.1"), base_url="http://127.0.0.1:22267")
-    r = client.get("/dashboard", allow_redirects=False)
+    r = client.get("/dashboard", follow_redirects=False)
     assert r.status_code in (302, 307)
     assert client.get("/dashboard/").text == "<html>dashboard</html>"
     assert client.get("/dashboard/alas", headers={"Accept": "text/html"}).text == "<html>dashboard</html>"

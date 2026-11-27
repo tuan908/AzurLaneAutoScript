@@ -6,6 +6,8 @@ from functools import wraps
 from json.decoder import JSONDecodeError
 from subprocess import list2cmdline
 
+# adbutils and uiautomator2 import pkg_resources, which setuptools no longer ships
+import module.device.pkg_resources  # noqa: F401
 import uiautomator2 as u2
 from adbutils.errors import AdbError
 from lxml import etree
@@ -222,7 +224,7 @@ class Uiautomator2(Connection):
         """Drag and shake, like:
                      /\
         +-----------+  +  +
-                        \/
+                        \\/
         A simple swipe or drag don't work well, because it only has two points.
         Add some way point to make it more like swipe.
 

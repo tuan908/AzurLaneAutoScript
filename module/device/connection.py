@@ -7,6 +7,8 @@ import subprocess
 import time
 from functools import wraps
 
+# adbutils and uiautomator2 import pkg_resources, which setuptools no longer ships
+import module.device.pkg_resources  # noqa: F401
 import uiautomator2 as u2
 from adbutils import AdbClient, AdbDevice, AdbTimeout, ForwardItem, ReverseItem
 from adbutils.errors import AdbError

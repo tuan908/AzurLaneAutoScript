@@ -6,6 +6,8 @@ import typing as t
 from time import sleep
 
 import numpy as np
+# adbutils and uiautomator2 import pkg_resources, which setuptools no longer ships
+import module.device.pkg_resources  # noqa: F401
 from adbutils import AdbError, Network
 
 from module.base.decorator import cached_property

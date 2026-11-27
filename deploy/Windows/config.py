@@ -34,6 +34,7 @@ class ConfigModel:
     InstallUiautomator2: bool = True
 
     # Ocr
+    # The OCR server is gone, OCR runs in each instance with numpy. Kept for old deploy.yaml files.
     UseOcrServer: bool = False
     StartOcrServer: bool = False
     OcrServerPort: int = 22268

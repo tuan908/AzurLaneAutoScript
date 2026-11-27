@@ -1,7 +1,5 @@
 """Start a dashboard smoke server from an isolated checkout, with a fake worker."""
 import argparse
-import asyncio
-import sys
 import time
 
 
@@ -29,7 +27,5 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=22368)
     args = parser.parse_args()
-    if sys.platform == "win32":
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
     ControlServer(uvicorn.Config("dev_tools.smoke_control_runtime:app", factory=True, host="127.0.0.1",
                                  port=args.port, workers=1, access_log=False)).run()

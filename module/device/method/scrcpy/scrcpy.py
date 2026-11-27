@@ -3,6 +3,8 @@ import time
 from functools import wraps
 
 import numpy as np
+# adbutils and uiautomator2 import pkg_resources, which setuptools no longer ships
+import module.device.pkg_resources  # noqa: F401
 from adbutils.errors import AdbError, AdbTimeout
 
 import module.device.method.scrcpy.const as const

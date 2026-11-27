@@ -16,6 +16,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.routing import Mount
 from starlette.staticfiles import StaticFiles
 
+from module.webui.lifespan import Lifecycle
+
 
 class HeaderMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
@@ -74,6 +76,19 @@ def start_server(
     **uvicorn_settings
 ):
 
+    if not host:
+        host = "0.0.0.0"
+
+    if port == 0:
+        port = get_free_port()
+
+    lifecycle = Lifecycle()
+    if auto_open_webbrowser:
+        # The loop exists only once uvicorn runs
+        lifecycle.on_startup.append(lambda: asyncio.get_running_loop().create_task(
+            open_webbrowser_on_server_started("localhost", port)
+        ))
+
     app = asgi_app(
         applications,
         cdn=cdn,
@@ -81,18 +96,8 @@ def start_server(
         debug=debug,
         allowed_origins=allowed_origins,
         check_origin=check_origin,
+        lifespan=lifecycle.lifespan,
     )
-
-    if auto_open_webbrowser:
-        asyncio.get_event_loop().create_task(
-            open_webbrowser_on_server_started("localhost", port)
-        )
-
-    if not host:
-        host = "0.0.0.0"
-
-    if port == 0:
-        port = get_free_port()
 
     if remote_access:
         start_remote_access_service(local_port=port)

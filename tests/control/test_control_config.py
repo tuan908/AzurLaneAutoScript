@@ -244,7 +244,7 @@ def test_http_patch_flow(client):
     revision = client.get("/api/v1/instances/alas/config").json()["revision"]
     body = {"revision": revision, "changes": {"Alas.Emulator.Serial": "127.0.0.1:16384"}}
 
-    assert client.patch("/api/v1/instances/alas/config", data=json.dumps(body)).status_code == 415
+    assert client.patch("/api/v1/instances/alas/config", content=json.dumps(body)).status_code == 415
 
     ok = client.patch("/api/v1/instances/alas/config", json=body)
     assert ok.status_code == 200

@@ -55,13 +55,13 @@ from module.config.utils import (
     read_file,
 )
 from module.logger import logger
-from module.ocr.rpc import start_ocr_server_process, stop_ocr_server_process
 from module.submodule.submodule import load_config
 from module.submodule.utils import get_config_mod
 from module.webui.base import Frame
 from module.webui.discord_presence import close_discord_rpc, init_discord_rpc
 from module.webui.fastapi import asgi_app
 from module.webui.lang import _t, t
+from module.webui.lifespan import Lifecycle
 from module.webui.patch import fix_py37_subprocess_communicate, patch_executor, patch_mimetype
 from module.webui.pin import put_input, put_select
 from module.webui.process_manager import ProcessManager
@@ -93,7 +93,6 @@ from module.webui.widgets import (
     put_output,
 )
 
-patch_executor()
 patch_mimetype()
 fix_py37_subprocess_communicate()
 task_handler = TaskHandler()
@@ -1452,8 +1451,6 @@ def startup(headless=False):
     State.init()
     lang.reload()
     updater.event = State.manager.Event()
-    if State.deploy_config.StartOcrServer:
-        start_ocr_server_process(State.deploy_config.OcrServerPort)
     if headless:
         return
     if updater.delay > 0:
@@ -1481,7 +1478,6 @@ def clearup(headless=False):
         close_discord_rpc()
     for manager in ProcessManager.all_managers():
         manager.stop()
-    stop_ocr_server_process()
     State.clearup()
     logger.info("Alas closed.")
 
@@ -1546,16 +1542,18 @@ def app(headless=False):
             return
         app_manage()
 
-    lifecycle = dict(
-        on_startup=[partial(startup, headless), lambda: ProcessManager.restart_processes(
+    # patch_executor() needs the running loop of the server
+    lifecycle = Lifecycle(
+        on_startup=[patch_executor, partial(startup, headless), lambda: ProcessManager.restart_processes(
             instances=instances, ev=updater.event
         )],
         on_shutdown=[partial(clearup, headless)],
     )
     if headless:
-        app = Starlette(**lifecycle)
+        app = Starlette(lifespan=lifecycle.lifespan)
     else:
-        app = asgi_app(applications=[index, manage], cdn=cdn, static_dir=None, debug=True, **lifecycle)
+        app = asgi_app(applications=[index, manage], cdn=cdn, static_dir=None, debug=True,
+                       lifespan=lifecycle.lifespan)
 
     # Control plane API at /api/v1, sharing ProcessManager with the GUI above
     from module.control.api import ControlApi, mount_control_api
@@ -1573,8 +1571,8 @@ def app(headless=False):
     instance_service.health = monitor.instance_health
     # Start after the GUI's startup (SyncManager ready); stop before clearup() stops the
     # workers, so a shutdown is never "recovered"
-    app.router.on_startup.append(monitor.start)
-    app.router.on_shutdown.insert(0, monitor.stop)
+    lifecycle.on_startup.append(monitor.start)
+    lifecycle.on_shutdown.insert(0, monitor.stop)
     mount_control_api(app, ControlApi(
         instance_service,
         password=key,

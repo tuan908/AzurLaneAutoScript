@@ -7,6 +7,8 @@ from functools import wraps
 from typing import List
 
 import websockets
+# adbutils and uiautomator2 import pkg_resources, which setuptools no longer ships
+import module.device.pkg_resources  # noqa: F401
 from adbutils.errors import AdbError
 from uiautomator2 import _Service
 

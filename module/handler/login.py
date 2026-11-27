@@ -2,6 +2,8 @@ from typing import Union
 
 import numpy as np
 from scipy.signal import find_peaks
+# adbutils and uiautomator2 import pkg_resources, which setuptools no longer ships
+import module.device.pkg_resources  # noqa: F401
 from uiautomator2 import UiObject
 from uiautomator2.exceptions import XPathElementNotFoundError
 from uiautomator2.xpath import XPath, XPathSelector

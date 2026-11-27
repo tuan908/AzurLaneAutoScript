@@ -1,6 +1,8 @@
 import os
 import re
 
+# adbutils and uiautomator2 import pkg_resources, which setuptools no longer ships
+import module.device.pkg_resources  # noqa: F401
 import adbutils
 import uiautomator2 as u2
 from adbutils import AdbClient, AdbDevice
@@ -285,8 +287,8 @@ class ConnectionAttr:
                 with OpenKey(HKEY_LOCAL_MACHINE, r"SOFTWARE\BlueStacks_nxt_cn") as key:
                     directory = QueryValueEx(key, 'UserDefinedDir')[0]
             except FileNotFoundError:
-                logger.error('Unable to find registry HKEY_LOCAL_MACHINE\SOFTWARE\BlueStacks_nxt '
-                             'or HKEY_LOCAL_MACHINE\SOFTWARE\BlueStacks_nxt_cn')
+                logger.error('Unable to find registry HKEY_LOCAL_MACHINE\\SOFTWARE\\BlueStacks_nxt '
+                             'or HKEY_LOCAL_MACHINE\\SOFTWARE\\BlueStacks_nxt_cn')
                 logger.error('Please confirm that you are using BlueStacks 5 hyper-v and not regular BlueStacks 5')
                 raise RequestHumanTakeover
         logger.info(f"Configuration file directory: {directory}")

@@ -26,9 +26,9 @@ def get_research_series_old(image, series_button=RESEARCH_SERIES):
     Counting white lines to detect Roman numerals.
 
     -------               --- --   --
-     | | |   --> 3 lines   |   \   /   --> 3 lines
-     | | |                 |   \   /
-     | | |   --> 3 lines   |    \ /    --> 2 lines
+     | | |   --> 3 lines   |   \\   /   --> 3 lines
+     | | |                 |   \\   /
+     | | |   --> 3 lines   |    \\ /    --> 2 lines
     -------               ---    v
 
     Args:
@@ -172,7 +172,7 @@ def parse_time(string):
     Returns:
         timedelta: datetime.timedelta instance.
     """
-    result = re.search('(\d+):(\d+):(\d+)', string)
+    result = re.search('(\\d+):(\\d+):(\\d+)', string)
     if not result:
         logger.warning(f'Invalid time string: {string}')
         return None
