@@ -114,7 +114,7 @@ export function Logs() {
           onValueChange={updateFilter}
         />
         <SegmentedControl
-          className="inline-flex rounded-full border-0 bg-white/10 p-0.5 [&_button]:h-5.5 [&_button]:rounded-full [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-2.5 [&_button]:text-xs [&_button]:text-terminal-dim [&_button[data-checked]]:text-terminal-text [&_[data-slot=segmented-control-indicator]]:rounded-full [&_[data-slot=segmented-control-indicator]]:bg-[#48484a]! [&_[data-slot=segmented-control-indicator]]:shadow-none"
+          className="inline-flex rounded-full border-0 bg-white/10 p-0.5 [&_button]:h-5.5 [&_button]:rounded-full [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-2.5 [&_button]:text-xs [&_button]:text-terminal-dim [&_button[data-checked]]:text-terminal-text **:data-[slot=segmented-control-indicator]:rounded-full **:data-[slot=segmented-control-indicator]:bg-[#48484a]! **:data-[slot=segmented-control-indicator]:shadow-none"
           aria-label="Log level"
           value={level}
           onValueChange={updateLevel}
