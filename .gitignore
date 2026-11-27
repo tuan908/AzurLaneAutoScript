@@ -258,3 +258,6 @@ console.bat
 # Pylance configuration file
 pyrightconfig.json
 .mcp-backups/
+# Built by native/build.sh
+/alas_native.abi3.so
+/alas_native.pyd

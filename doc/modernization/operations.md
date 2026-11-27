@@ -32,6 +32,12 @@ The API uses the password as a bearer token when configured. The launcher always
 `start-control.bat` runs `uv sync` and then `alasd\bin\alasd.exe`, the Go control server.
 Build it in WSL with `alasd/build.sh`; `deploy/Windows/sync-from-wsl.sh` builds and copies it.
 
+`native/build.sh` builds `alas_native` (Rust, PyO3) into the ALAS root as `alas_native.pyd`
+for Windows (cross-built with zig) and `alas_native.abi3.so` for Linux. It is optional: every
+caller falls back to Python. Today it only holds the LZ4 decoder of aScreenCap (3 ms instead of
+43 ms per 720p frame); the profiling behind that choice is at the top of `native/src/lib.rs`.
+Needs Rust with the `x86_64-pc-windows-gnu` target, `maturin` (`uv tool install maturin`) and zig.
+
 ## Optional Windows startup task
 
 In the Windows user session that runs MuMu, run these commands from the installed ALAS folder.
