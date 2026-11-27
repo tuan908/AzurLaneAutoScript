@@ -141,7 +141,8 @@ def launch_hidden_server():
         cwd=str(root), creationflags=subprocess.DETACHED_PROCESS,
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
-    deadline = time.monotonic() + 45
+    # The first launch installs uv, Python and the dependencies into toolkit\uv and .venv
+    deadline = time.monotonic() + 600
     while time.monotonic() < deadline:
         process = find_control_server()
         if process:
