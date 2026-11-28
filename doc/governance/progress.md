@@ -140,3 +140,26 @@ One entry per round: problem, options, choice, verification, anti-regression che
   lines (both separators, and upstream's end marker without a result). A Python test checks
   `alas.py` still logs those templates; `alasd` (current task, success/failure counters) and
   the dashboard (recent completions) test against the same lines.
+
+## Status after round 10 (2026-11-28)
+
+Acceptance criteria, for the owned code (ADR 0001):
+
+- One authoritative source per core concept: the API contract, policy limits, worker
+  protocol, sidecar methods, error types, instance listing, profile names, scheduler and
+  takeover log lines, log line format, time parsing and preference storage each have one
+  source, listed with its checking test in `architecture.md`.
+- Clear modules and public interfaces: package and layer rules in `architecture.md`,
+  enforced by `cmd/alasd/architecture_test.go` and `src/architecture.test.ts`.
+- No unexplained duplicates: remaining copies across the Go/Python/TypeScript boundary are
+  each fixture- or source-tested; T16 (two next-run wordings) is pending a UX decision.
+- No cycles: Go forbids them; the dashboard test forbids feature cycles.
+- Business logic decoupled from UI, storage and frameworks: network and browser storage
+  each have one owner (enforced); config logic stays in upstream Python behind the sidecar.
+- Anti-regression: everything above runs in `dev_tools/check.sh` and CI; each new check was
+  mutation-tested (planted drift caught, then reverted).
+- Contracts preserved: no API change except removing the dead `logQueueManagerAlive`
+  field (nothing read it); all suites green.
+
+Pending decisions: T11 (upstream file), T16 (UX wording). Not merged into
+`modernize/main` yet: branch `governance/main` in the worktree `../alas-governance`.
