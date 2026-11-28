@@ -32,4 +32,11 @@ describe("LogText", () => {
     expect(plain(html("plain text"))).toBe("plain text");
     expect(html("GameStuckError: Wait too long")).toContain("font-bold text-[#ff6961]");
   });
+
+  it("reads the live log separator │", () => {
+    const out = html("INFO     20:34:15.112 │ Click ( 835,  619) @ REWARD_GOTO_MAIN");
+    expect(out).toContain('<span class="text-[#5ac8fa]">INFO</span>');
+    expect(out).toContain('<span class="text-terminal-dim">20:34:15.112</span>');
+    expect(plain(out)).toBe("INFO     20:34:15.112 │ Click ( 835,  619) @ REWARD_GOTO_MAIN");
+  });
 });

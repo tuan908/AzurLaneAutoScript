@@ -49,3 +49,16 @@ One entry per round: problem, options, choice, verification, anti-regression che
 - Considered: importing `openapi.json` into the dashboard bundle to read the limits; rejected
   (ships the whole contract to the browser for three numbers).
 - Verified: Go tests, dashboard typecheck/lint/format and 88 unit tests.
+
+## Round 4 — one parser for the ALAS log line (T05)
+
+- Problem: the log line format was parsed in `log-highlight.tsx` and again in
+  `log-severity.ts` with different regexes. A probe with real worker output found two bugs:
+  - the highlighter only knew the ASCII `|` separator, but the live log uses `│`, so live
+    lines never got their level and time coloured (the time was painted as numbers);
+  - severity matched `ERROR` anywhere, so `INFO … @ POPUP_ERROR_CONFIRM` showed as an error.
+- Choice: `features/logs/log-format.ts` parses a line once into entry / rule / text, with
+  both separators. Highlighting renders the parsed parts; severity comes from the parsed
+  level, plain text inherits the entry above it, a traceback or exception line is an error.
+- Verified: existing tests unchanged and passing; new tests for both formats, the `│`
+  separator and the level-not-message rule (93 tests).

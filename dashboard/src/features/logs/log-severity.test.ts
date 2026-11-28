@@ -30,4 +30,15 @@ describe("lineSeverities", () => {
     );
     expect([...levels.values()]).toEqual(["warn", "warn", "", ""]);
   });
+
+  it("takes the level of the entry, not words in the message", () => {
+    const levels = lineSeverities(
+      lines(
+        "INFO     20:34:15.112 │ Click (1069, 356) @ POPUP_ERROR_CONFIRM",
+        "ERROR    20:34:16.000 │ Lost the emulator connection",
+        "INFO     20:34:17.000 │ Retry, WARNING count 2",
+      ),
+    );
+    expect([...levels.values()]).toEqual(["", "error", ""]);
+  });
 });
