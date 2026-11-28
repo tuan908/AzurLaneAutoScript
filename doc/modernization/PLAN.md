@@ -1,5 +1,10 @@
 # ALAS modernization — implementation plan
 
+> **Historical.** This describes the Python control server (`control_server.py`, `ProcessManager`,
+> PyWebIO), removed in `e87a7e3b6` when `alasd` replaced it. Kept for the reasoning behind
+> decisions that carried over. The current system is in
+> [doc/governance/architecture.md](../governance/architecture.md).
+
 Status: first runnable build (2026-11-25). Owner: tuan908.
 Source: the "ALAS modernization plan" proposal, checked against this checkout at `a868d2abe`.
 

@@ -1,5 +1,10 @@
 # ALAS lifecycle ownership map (P1.1)
 
+> **Historical.** This describes the Python control server (`control_server.py`, `ProcessManager`,
+> PyWebIO), removed in `e87a7e3b6` when `alasd` replaced it. Kept for the reasoning behind
+> decisions that carried over. The current system is in
+> [doc/governance/architecture.md](../governance/architecture.md).
+
 Status: P1.1 caller map with a first-build note. See `doc/modernization/PLAN.md`.
 References were taken at upstream `a868d2abe` (fork `modernize/main` `358f882e4`).
 

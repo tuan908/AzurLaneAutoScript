@@ -92,3 +92,13 @@ One entry per round: problem, options, choice, verification, anti-regression che
   Windows, race tests), Python (ruff, 1587 tests in one run) and the dashboard (types,
   lint, format, 111 tests) in about 40 s; `.github/workflows/check.yml` runs it on this
   fork's branches.
+
+## Round 7 — current map, stale docs marked, dead deploy fallback removed (T07, T08)
+
+- `doc/governance/architecture.md`: processes, state ownership, every contract with its
+  single source and the test that checks it, module rules, and "where to make a change".
+- `doc/modernization/PLAN.md` and `lifecycle.md` describe the removed Python server; they
+  carry a "historical" banner pointing to the map instead of being rewritten. The other
+  modernization docs were checked and are current (`baseline.md` and `soak-probe.md` are
+  about the upstream install, which still runs `gui.py`).
+- `sync-control.py` no longer recognises `control_server.py`; the only target runs `alasd.exe`.

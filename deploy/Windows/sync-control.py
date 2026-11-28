@@ -46,9 +46,7 @@ def find_control_server():
             return None
         raise
     process = psutil.Process(pid)
-    # alasd.exe since the Go control server, control_server.py before
-    is_control_server = process.name().lower() == "alasd.exe" or any(
-        Path(arg).name in ("control_server.py", "alasd.exe") for arg in process.cmdline())
+    is_control_server = process.name().lower() == "alasd.exe"
     if Path(process.cwd()) != root or not is_control_server:
         raise RuntimeError(f"Port {port} is serving a different installation or command")
     return process
