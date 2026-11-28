@@ -26,11 +26,21 @@ import (
 const (
 	LogTailLines   = 2000
 	LogLineMaxSize = 16 * 1024
-	// Exit codes of the worker, see module/exception.py and module/control/worker.py
+)
+
+// Protocol with the Python worker. The Python side is the source: protocol_test.go reads
+// module/exception.py and module/control/worker.py and fails if these copies disagree.
+const (
 	HumanTakeoverExitCode  = 10
 	RetryLaterExitCode     = 11
 	AlreadyRunningExitCode = 75
+	// Key of a log entry in a stdout line: {"log": "..."}
+	LogKey = "log"
+	// Line on stdin that asks for a graceful stop
+	StopCommand = "stop"
 )
+
+const ownedElsewhere = "Worker is owned by an earlier ALAS server or another launcher"
 
 var (
 	taskStart = regexp.MustCompile("Scheduler: Start task `([^`]+)`")
@@ -286,15 +296,14 @@ func (m *Manager) readProtocol(r *run, rd io.Reader) {
 	sc := bufio.NewScanner(rd)
 	sc.Buffer(make([]byte, 64*1024), 8*1024*1024)
 	for sc.Scan() {
-		var msg struct {
-			Log *string `json:"log"`
-		}
 		line := sc.Bytes()
-		if err := json.Unmarshal(line, &msg); err != nil || msg.Log == nil {
+		var msg map[string]json.RawMessage
+		var text string
+		if json.Unmarshal(line, &msg) != nil || json.Unmarshal(msg[LogKey], &text) != nil {
 			m.trackActivity(r, string(line))
 			continue
 		}
-		m.trackActivity(r, *msg.Log)
+		m.trackActivity(r, text)
 	}
 }
 
@@ -384,7 +393,7 @@ func (m *Manager) stop() bool {
 	m.mu.Unlock()
 
 	if wasAlive {
-		_, _ = io.WriteString(r.stdin, "stop\n")
+		_, _ = io.WriteString(r.stdin, StopCommand+"\n")
 		select {
 		case <-r.exited:
 		case <-time.After(m.cfg.GracefulStop):
@@ -528,7 +537,7 @@ func (m *Manager) Status() Status {
 	case alive || unmanaged:
 		s.State = "running"
 		if unmanaged {
-			msg := "Worker is owned by an earlier ALAS server or another launcher"
+			msg := ownedElsewhere
 			s.LastError = &msg
 		}
 	case r == nil || m.stopRequested:
@@ -537,7 +546,7 @@ func (m *Manager) Status() Status {
 		s.State = "failed"
 		msg := fmt.Sprintf("Worker exited with code %d", *exitCode)
 		if *exitCode == AlreadyRunningExitCode {
-			msg = "Worker is owned by an earlier ALAS server or another launcher"
+			msg = ownedElsewhere
 		}
 		s.LastError = &msg
 	default:

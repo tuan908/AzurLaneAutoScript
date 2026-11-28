@@ -3,7 +3,6 @@
 package instances
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -45,9 +44,9 @@ type Tasks struct {
 }
 
 type Service struct {
-	Root     string
-	Workers  *worker.Registry
-	Config   *sidecar.Client
+	Root    string
+	Workers *worker.Registry
+	Config  *sidecar.Client
 	// Health of an instance, set by the health monitor; nil value means no health yet
 	Health func(id string) any
 }
@@ -194,10 +193,6 @@ func (s *Service) Tasks(id string) (Tasks, error) {
 		Waiting []Task `json:"waiting"`
 	}
 	if err := s.Config.Call("tasks", map[string]any{"instance": id}, &queue); err != nil {
-		var se *sidecar.Error
-		if errors.As(err, &se) {
-			return out, err
-		}
 		return out, err
 	}
 	pending, waiting := append([]Task{}, queue.Pending...), append([]Task{}, queue.Waiting...)

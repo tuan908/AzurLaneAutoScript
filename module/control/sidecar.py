@@ -45,14 +45,14 @@ class Handlers:
             args=lambda name: read_file(filepath_args("args", get_config_mod(name))),
             menu=lambda name: read_file(filepath_args("menu", get_config_mod(name))),
             i18n=i18n,
-            read_raw=self.read_raw,
+            read_raw=self._read_raw,
             read_config=self.updater.read_file,
             write_config=lambda name, data: self.updater.write_file(name, data),
             save_callback=self.updater.save_callback,
             lock=lambda name: config_lock(name, timeout=10, required=True),
         )
 
-    def read_raw(self, name):
+    def _read_raw(self, name):
         try:
             with open(self.filepath_config(name), "rb") as f:
                 return f.read()
@@ -69,11 +69,6 @@ class Handlers:
         if deploy.Run:
             runs = [r.strip(" ['\"]") for r in str(deploy.Run).split(",") if r.strip(" ['\"]")]
         return {"password": deploy.Password or None, "run": runs}
-
-    def instances(self):
-        """Configured instances, with the function each one runs"""
-        from module.config.utils import alas_instance
-        return [{"id": name, "func": self.get_config_mod(name)} for name in alas_instance()]
 
     def schema(self, instance, lang):
         return self.config.schema(instance, lang)
@@ -124,7 +119,7 @@ def serve(stdin, stdout, handlers=None):
             continue
         try:
             method = request["method"]
-            if method.startswith("_") or not hasattr(handlers, method) or method == "read_raw":
+            if method.startswith("_") or not hasattr(handlers, method):
                 raise ValueError(f"Unknown method {method}")
             result = getattr(handlers, method)(**(request.get("params") or {}))
             response = {"id": rid, "result": result}

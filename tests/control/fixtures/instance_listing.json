@@ -1,0 +1,25 @@
+{
+  "about": "Which files of config/ are instances. Python: module.config.utils.alas_instance + module.submodule.utils.get_config_mod (the source). Go: alasd/internal/instances Service.List. Both test against these cases; Go also checks the order (Alas profiles then mod profiles, each by name).",
+  "cases": [
+    {
+      "name": "no profiles falls back to alas",
+      "files": [],
+      "instances": [{"id": "alas", "func": "alas"}]
+    },
+    {
+      "name": "templates are not profiles",
+      "files": ["template.json", "template.maa.json", "template.fpy.json", "deploy.yaml"],
+      "instances": [{"id": "alas", "func": "alas"}]
+    },
+    {
+      "name": "alas and mod profiles",
+      "files": ["alas2.json", "alas.json", "template.json", "maa1.maa.json", "deploy.yaml", "notes.txt"],
+      "instances": [{"id": "alas", "func": "alas"}, {"id": "alas2", "func": "alas"}, {"id": "maa1", "func": "maa"}]
+    },
+    {
+      "name": "mod profiles only",
+      "files": ["fpy1.fpy.json"],
+      "instances": [{"id": "fpy1", "func": "fpy"}]
+    }
+  ]
+}

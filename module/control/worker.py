@@ -18,8 +18,11 @@ import os
 import sys
 import threading
 
+# Protocol with alasd. alasd/internal/worker/protocol_test.go checks its copies against these.
 ALREADY_RUNNING_EXIT_CODE = 75
 WORKER_LOCK_DIR = "./config/tmp/workers"
+LOG_KEY = "log"
+STOP_COMMAND = "stop"
 
 
 def _protocol_stream():
@@ -48,7 +51,7 @@ class Publisher:
 
     def __call__(self, log):
         try:
-            line = json.dumps({"log": self.text(log)}, ensure_ascii=False)
+            line = json.dumps({LOG_KEY: self.text(log)}, ensure_ascii=False)
         except Exception:
             return
         with self.lock:
@@ -75,7 +78,7 @@ def _command_stream():
 def _watch_commands(commands, stop: threading.Event):
     try:
         for line in commands:
-            if line.strip() == "stop":
+            if line.strip() == STOP_COMMAND:
                 break
     except (OSError, ValueError):
         pass

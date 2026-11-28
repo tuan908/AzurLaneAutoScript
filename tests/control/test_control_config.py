@@ -248,6 +248,6 @@ def test_sidecar_update_flow(call):
 
 
 def test_sidecar_refuses_private_and_unknown_methods(call):
-    assert call("read_raw", name="alas")["error"]["type"] == "ValueError"
+    assert call("_read_raw", name="alas")["error"]["type"] == "ValueError"
     assert call("_nope")["error"]["type"] == "ValueError"
     assert call("nope")["error"]["type"] == "ValueError"

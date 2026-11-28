@@ -48,7 +48,7 @@ func intp(v int) *int { return &v }
 
 type clock struct{ now time.Time }
 
-func (c *clock) Now() time.Time           { return c.now }
+func (c *clock) Now() time.Time          { return c.now }
 func (c *clock) advance(d time.Duration) { c.now = c.now.Add(d) }
 
 func setup(t *testing.T, status worker.Status) (*Monitor, *fakeService, *clock) {
