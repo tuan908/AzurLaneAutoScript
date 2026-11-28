@@ -1,36 +1,7 @@
 import type { InstanceStatus } from "@/api/client";
+import { since } from "@/shared/time";
 
 export type Tone = "ok" | "warn" | "bad" | "idle";
-
-export function formatDuration(seconds: number): string {
-  const s = Math.max(0, Math.floor(seconds));
-  const d = Math.floor(s / 86400);
-  const h = Math.floor((s % 86400) / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  if (d) return `${d}d ${h}h`;
-  if (h) return `${h}h ${m}m`;
-  if (m) return `${m}m ${s % 60}s`;
-  return `${s}s`;
-}
-
-/** Alas writes times as local "YYYY-MM-DD HH:MM:SS"; the API's own times are ISO with an offset. */
-export function parseTime(value: string): number {
-  const local = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(value);
-  return new Date(local ? value.replace(" ", "T") : value).getTime();
-}
-
-export function since(iso: string | null | undefined, now: number): string {
-  if (!iso) return "—";
-  return formatDuration((now - parseTime(iso)) / 1000);
-}
-
-/** "in 2h 5m", or "due now" once the time has passed */
-export function untilNextRun(value: string, now: number): string {
-  const t = parseTime(value);
-  if (Number.isNaN(t)) return value;
-  const seconds = (t - now) / 1000;
-  return seconds <= 0 ? "due now" : `in ${formatDuration(seconds)}`;
-}
 
 export function healthTone(s: InstanceStatus): { tone: Tone; label: string } {
   const h = s.health;

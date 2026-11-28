@@ -2,13 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Switch, SwitchThumb } from "@ui-sdk/react/switch";
 
 import type { ConfigField, ConfigTask, ConfigValue } from "@/api/client";
+import { formatAlasTime, relativeTime } from "@/shared/time";
 import { Button } from "@/shared/ui/button";
 import { Icon } from "@/shared/ui/icon";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { useNow } from "@/shared/use-now";
 
 import { tasksQuery } from "../scheduler/queries";
-import { formatNextRun, parseNextRun, relativeTime, schedulerOf } from "./task-state";
+import { parseNextRun, schedulerOf } from "./task-state";
 
 export function TaskHeader({
   instanceId,
@@ -70,7 +71,7 @@ export function TaskHeader({
               <time
                 className="font-medium text-ink"
                 dateTime={new Date(next).toISOString()}
-                title={formatNextRun(next)}
+                title={formatAlasTime(next)}
               >
                 {next <= now ? "as soon as possible" : relativeTime(next, now)}
               </time>
@@ -86,7 +87,7 @@ export function TaskHeader({
           title="Set the next run to now, then save"
           onClick={() => {
             if (!enabled) onChange(enable, true);
-            onChange(nextRun, formatNextRun(Date.now()));
+            onChange(nextRun, formatAlasTime(Date.now()));
           }}
         >
           <Icon name="play" />

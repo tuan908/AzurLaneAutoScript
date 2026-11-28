@@ -1,7 +1,6 @@
 import type { Task } from "@/api/client";
+import { untilNextRun } from "@/shared/time";
 import { useNow } from "@/shared/use-now";
-
-import { untilNextRun } from "../instances/status";
 export function QueueList({
   items,
   runningNow,

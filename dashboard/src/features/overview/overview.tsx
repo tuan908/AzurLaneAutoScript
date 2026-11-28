@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import type { InstanceStatus } from "@/api/client";
+import { since } from "@/shared/time";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
 import { Metric } from "@/shared/ui/metric";
@@ -8,7 +9,7 @@ import { QueryContent } from "@/shared/ui/query-content";
 import { useNow } from "@/shared/use-now";
 
 import { useDashboardRoute } from "../instances/navigation";
-import { healthTone, since } from "../instances/status";
+import { healthTone } from "../instances/status";
 import { useWorkspaceStatus } from "../instances/workspace";
 import { LogPeek } from "../logs/log-preview";
 import { tasksQuery } from "../scheduler/queries";

@@ -4,6 +4,9 @@
 //   shared   UI kit and hooks with no business meaning. May import api.
 //   features one folder per feature. May import api, shared and other features, without cycles.
 //   app      shell, routing, wiring. May import everything; nothing imports it.
+//
+// Plus two single owners: the network belongs to api/client.ts, browser storage to
+// shared/storage.ts (and the session-only login token in api/client.ts).
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
@@ -79,5 +82,26 @@ describe("dashboard architecture", () => {
     };
     for (const node of graph.keys()) visit(node, []);
     expect(cycles).toEqual([]);
+  });
+
+  const sources = files(SRC).filter((f) => !/\.test\.tsx?$/.test(f) && f !== __filename);
+  const usesOutside = (pattern: RegExp, owners: string[]) =>
+    sources
+      .filter((f) => !owners.includes(relative(SRC, f)) && pattern.test(readFileSync(f, "utf8")))
+      .map((f) => relative(SRC, f));
+
+  it("only api/client.ts talks to the network", () => {
+    expect(usesOutside(/\bfetch\(|new EventSource\b|new WebSocket\b/, ["api/client.ts"])).toEqual(
+      [],
+    );
+  });
+
+  it("only shared/storage.ts (and the token in api/client.ts) uses browser storage", () => {
+    expect(
+      usesOutside(/\b(localStorage|sessionStorage|indexedDB)\b/, [
+        "shared/storage.ts",
+        "api/client.ts",
+      ]),
+    ).toEqual([]);
   });
 });

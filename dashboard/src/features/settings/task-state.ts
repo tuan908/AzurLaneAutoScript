@@ -1,4 +1,5 @@
 import type { ConfigField, ConfigTask, ConfigValue } from "@/api/client";
+import { parseTime } from "@/shared/time";
 
 export const SCHEDULER_GROUP = "Scheduler";
 
@@ -23,27 +24,10 @@ export function isChanged(field: ConfigField, value: ConfigValue) {
   return String(value ?? "") !== String(field.default);
 }
 
-// ALAS writes server-local time; the server runs on the same machine as the browser.
 export function parseNextRun(value: ConfigValue): number | null {
   if (typeof value !== "string" || !value) return null;
-  const t = new Date(value.replace(" ", "T")).getTime();
+  const t = parseTime(value);
   return Number.isNaN(t) ? null : t;
-}
-
-const pad = (n: number) => String(n).padStart(2, "0");
-export function formatNextRun(t: number) {
-  const d = new Date(t);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-export function relativeTime(t: number, now: number) {
-  const seconds = Math.round((t - now) / 1000);
-  const abs = Math.abs(seconds);
-  if (abs < 60) return relative.format(seconds, "second");
-  if (abs < 3600) return relative.format(Math.round(seconds / 60), "minute");
-  if (abs < 86400) return relative.format(Math.round(seconds / 3600), "hour");
-  return relative.format(Math.round(seconds / 86400), "day");
 }
 
 // Rarely touched groups, folded under "Advanced". Search and the Changed filter still list them.

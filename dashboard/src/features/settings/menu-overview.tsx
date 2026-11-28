@@ -3,11 +3,12 @@ import { Button as SdkButton } from "@ui-sdk/react/button";
 import { Switch, SwitchThumb } from "@ui-sdk/react/switch";
 
 import type { ConfigField, ConfigSchema, ConfigTask, ConfigValue } from "@/api/client";
+import { relativeTime } from "@/shared/time";
 import { useNow } from "@/shared/use-now";
 
 import { tasksQuery } from "../scheduler/queries";
 import { splitHelp } from "./help";
-import { parseNextRun, relativeTime, schedulerOf } from "./task-state";
+import { parseNextRun, schedulerOf } from "./task-state";
 
 type Menu = ConfigSchema["menus"][number];
 

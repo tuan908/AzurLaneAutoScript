@@ -1,10 +1,10 @@
 import type { InstanceStatus } from "@/api/client";
+import { untilNextRun } from "@/shared/time";
 import { Banner } from "@/shared/ui/banner";
 import { Button } from "@/shared/ui/button";
 import { useNow } from "@/shared/use-now";
 
 import { useDashboardRoute, type Tab } from "./navigation";
-import { untilNextRun } from "./status";
 
 export function WorkspaceBanners({
   status,

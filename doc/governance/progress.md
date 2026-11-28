@@ -102,3 +102,20 @@ One entry per round: problem, options, choice, verification, anti-regression che
   modernization docs were checked and are current (`baseline.md` and `soak-probe.md` are
   about the upstream install, which still runs `gui.py`).
 - `sync-control.py` no longer recognises `control_server.py`; the only target runs `alasd.exe`.
+
+## Round 8 — dashboard shared time and storage, error contract (T14, T15)
+
+- Time: `shared/time.ts` now holds the duration and relative-time helpers and the one
+  parser of ALAS local times. `features/instances/status.ts` and
+  `features/settings/task-state.ts` lost their copies; the top bar no longer imports
+  `features/instances` just to format uptime. Tests moved with the code.
+- Storage: `shared/storage.ts` (`loadPreference` validates what it reads,
+  `savePreference` drops writes when storage is unavailable) replaced three hand-written
+  copies in theme and language settings. The login token stays in `api/client.ts`: it is
+  session-only with an in-memory fallback, a different policy.
+- Rules added to `src/architecture.test.ts`: only `api/client.ts` uses the network; only
+  `shared/storage.ts` (and the token) use browser storage. Mutation-checked.
+- Error contract (T15): `alasd/internal/api/errors_test.go` checks that every Python class
+  name `mapError` turns into a status exists in `module/control` or `module/config`.
+- Pending (T16): two wordings for the same next-run time; needs a UX choice.
+- Verified: `dev_tools/check.sh` green.

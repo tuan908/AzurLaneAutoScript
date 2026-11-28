@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import type { ConfigField, ConfigTask } from "@/api/client";
+import { formatAlasTime } from "@/shared/time";
 
 import {
-  formatNextRun,
   headerPaths,
   isChanged,
   matchField,
@@ -66,7 +66,7 @@ describe("task state", () => {
   it("round-trips ALAS datetimes", () => {
     const t = parseNextRun("2026-11-26 21:05:09");
     expect(t).not.toBeNull();
-    expect(formatNextRun(t ?? 0)).toBe("2026-11-26 21:05:09");
+    expect(formatAlasTime(t ?? 0)).toBe("2026-11-26 21:05:09");
     expect(parseNextRun("nope")).toBeNull();
   });
 });

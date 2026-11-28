@@ -2,10 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 
 import { CommandPalette } from "@/features/command-palette/command-palette";
 import { healthQuery } from "@/features/health/queries";
-import { formatDuration } from "@/features/instances/status";
 import { useConnection, useConnectionError } from "@/features/live-updates/events";
 import { LANGS, LangSchema, saveLang, useLang } from "@/features/settings/lang";
 import type { Theme } from "@/shared/theme";
+import { formatDuration } from "@/shared/time";
 import { Chip } from "@/shared/ui/chip";
 import { Select } from "@/shared/ui/select";
 
