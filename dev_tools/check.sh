@@ -8,6 +8,7 @@ set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 export PATH="$HOME/.local/go/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH"
 
+groups=("$@")
 [[ $# -eq 0 ]] && groups=(go py ui)
 
 step() { printf '\n== %s\n' "$*"; }
@@ -29,7 +30,13 @@ for group in "${groups[@]}"; do
         )
         ;;
     py)
-        step "Python: ruff on owned code, tests"
+        step "Python: lock and requirements.txt up to date, ruff on owned code, tests"
+        uv lock --check
+        if ! uv export -q --frozen --no-dev --no-hashes --no-annotate --no-header \
+            | diff -u <(grep -v '^#' requirements.txt) - >&2; then
+            echo "requirements.txt is stale: regenerate it with the command at its top" >&2
+            exit 1
+        fi
         uvx ruff@0.17.6 check .
         # tests/island*: need the screenshot collection, which is not in the repository
         uv run pytest -q -p no:cacheprovider tests/control tests/ocr tests/device tests/os \
@@ -40,6 +47,13 @@ for group in "${groups[@]}"; do
         (
             cd dashboard
             bun install --frozen-lockfile >/dev/null
+            generated=$(mktemp)
+            trap 'rm -f -- "$generated"' EXIT
+            bunx openapi-typescript openapi.json --output "$generated" >/dev/null
+            if ! diff -q "$generated" src/api/generated.ts >/dev/null; then
+                echo "src/api/generated.ts is stale: run bun run gen:api" >&2
+                exit 1
+            fi
             bun run check
             bun run test
         )

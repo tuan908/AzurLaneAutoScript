@@ -119,3 +119,14 @@ One entry per round: problem, options, choice, verification, anti-regression che
   name `mapError` turns into a status exists in `module/control` or `module/config`.
 - Pending (T16): two wordings for the same next-run time; needs a UX choice.
 - Verified: `dev_tools/check.sh` green.
+
+## Round 9 — generated files can't go stale (T17)
+
+- `check.sh` now fails when `uv.lock` doesn't match `pyproject.toml`, when
+  `requirements.txt` differs from `uv export`, or when `src/api/generated.ts` differs from
+  what `openapi.json` generates. Each failure prints the command that fixes it.
+- Found by mutation-checking these checks: `check.sh <group>` never ran anything (the group
+  list was empty when arguments were given) and still reported success. Fixed; an unknown
+  group now fails with exit code 2. Full runs (no arguments, as CI calls it) were not affected.
+- Verified: planted drift in `generated.ts` and in `requirements.txt` each fail the right
+  group; the full run is green.
