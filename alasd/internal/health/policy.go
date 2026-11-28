@@ -39,7 +39,7 @@ func DefaultPolicy() Policy {
 	return Policy{MaxRestartsPerHour: 3, BackoffSeconds: []int{30, 120, 300}, Instances: map[string]Override{}}
 }
 
-// Policy limits. dashboard/openapi.json states them as minimum/maximum; policy_test.go compares.
+// Policy limits. dashboard/openapi.json states them as minimum/maximum; limits_test.go compares.
 const (
 	MaxRestartsPerHour = 60
 	MaxStallMinutes    = 1440
