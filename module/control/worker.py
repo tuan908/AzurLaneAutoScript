@@ -122,10 +122,10 @@ def run(config_name: str, func: str, publish, commands) -> None:
         logger.info(f"[{config_name}] exited. Reason: Finish\n")
     except RequestHumanTakeover:
         logger.critical("Request human takeover")
-        raise SystemExit(HUMAN_TAKEOVER_EXIT_CODE)
+        raise SystemExit(HUMAN_TAKEOVER_EXIT_CODE) from None
     except Exception as e:
         logger.exception(e)
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
 
 def main(argv=None):

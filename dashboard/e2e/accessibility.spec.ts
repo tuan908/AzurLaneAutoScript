@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 
 import { expect, test, type Page, type Route } from "@playwright/test";
 
-import { instanceFixture } from "../src/features/instances/test-fixtures";
+import { instanceFixture } from "../src/api/test-fixtures";
 
 const origin = "http://dashboard.test";
 const settingsPath = "/api/v1/instances/alas/config";

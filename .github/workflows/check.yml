@@ -1,0 +1,24 @@
+# Runs dev_tools/check.sh, the one entry point of every check (doc/governance ADR 0004).
+# Only on this fork's own branches: upstream PR branches come from upstream bug_fix.
+name: check
+
+on:
+  push:
+    branches: [modernize/main, governance/main]
+  pull_request:
+    branches: [modernize/main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: alasd/go.mod
+          cache-dependency-path: alasd/go.sum
+      - uses: astral-sh/setup-uv@v10
+      - uses: oven-sh/setup-bun@v2
+      # Python 3.15 from .python-version, dependencies from uv.lock
+      - run: uv sync --frozen
+      - run: dev_tools/check.sh

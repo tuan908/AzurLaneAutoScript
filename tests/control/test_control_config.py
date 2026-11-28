@@ -3,8 +3,8 @@ import json
 import os
 
 import pytest
-from module.control.configuration import (EDITABLE_TYPES, ConfigConflict, ConfigInvalid, ConfigService,
-                                          ConfigUnsupported)
+
+from module.control.configuration import EDITABLE_TYPES, ConfigConflict, ConfigInvalid, ConfigService, ConfigUnsupported
 from module.control.sidecar import Handlers, serve
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -59,8 +59,7 @@ def fields_of(schema):
     for menu in schema["menus"]:
         for task in menu["tasks"]:
             for group in task["groups"]:
-                for field in group["fields"]:
-                    yield field
+                yield from group["fields"]
 
 
 def test_schema_covers_metadata(files):

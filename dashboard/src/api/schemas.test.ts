@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type * as z from "zod";
 
-import { instanceFixture } from "@/features/instances/test-fixtures";
+import { instanceFixture } from "@/api/test-fixtures";
 
 import names from "../../../tests/control/fixtures/profile_names.json";
 import contract from "../../openapi.json";

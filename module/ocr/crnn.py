@@ -74,7 +74,8 @@ def load_params(path):
         names.append(buf[offset:offset + length].decode('utf-8'))
         offset += length
     params = {}
-    for name, array in zip(names, arrays):
+    # A params file with more names than arrays (or fewer) is corrupt
+    for name, array in zip(names, arrays, strict=True):
         name = name.split(':', 1)[-1]
         params[name] = array.astype(np.float32)
     return params

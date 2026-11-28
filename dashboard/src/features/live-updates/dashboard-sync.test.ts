@@ -2,8 +2,8 @@ import { QueryClient } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { api } from "@/api/client";
+import { deferred, instanceFixture } from "@/api/test-fixtures";
 
-import { deferred, instanceFixture } from "../instances/test-fixtures";
 import { logStore } from "../logs/log-store";
 import { createDashboardSync } from "./dashboard-sync";
 import { startEventStream } from "./event-stream";

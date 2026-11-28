@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import type { InstanceStatus } from "@/api/client";
+import { instanceFixture as make } from "@/api/test-fixtures";
 
 import { formatDuration, healthTone, statusLine, untilNextRun } from "./status";
-import { instanceFixture as make } from "./test-fixtures";
 
 type Health = NonNullable<InstanceStatus["health"]>;
 const health = (state: Health["state"], gaveUp = false): Health => ({

@@ -1,6 +1,6 @@
 //go:build !windows
 
-package worker
+package proc
 
 import (
 	"os/exec"

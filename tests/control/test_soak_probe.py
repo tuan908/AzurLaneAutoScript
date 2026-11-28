@@ -12,14 +12,23 @@ import sys
 import threading
 import time
 from collections import namedtuple
-from datetime import datetime, timedelta
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
 from dev_tools import soak_probe
-from dev_tools.soak_probe import COLUMNS, CpuCache, CsvSink, build_http_row, build_log_rows, build_proc_row, \
-    classify, make_snapshot, parse_last_log_timestamp
+from dev_tools.soak_probe import (
+    COLUMNS,
+    CpuCache,
+    CsvSink,
+    build_http_row,
+    build_log_rows,
+    build_proc_row,
+    classify,
+    make_snapshot,
+    parse_last_log_timestamp,
+)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -399,7 +408,7 @@ def http_server():
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        yield 'http://127.0.0.1:{}'.format(server.server_address[1])
+        yield f'http://127.0.0.1:{server.server_address[1]}'
     finally:
         server.shutdown()
         server.server_close()
@@ -423,7 +432,7 @@ def test_http_row_ok_and_errors(http_server):
     row = build_http_row(http_server + '/fail', timeout=5)
     assert row['http_status'] == 500
 
-    row = build_http_row('http://127.0.0.1:{}/'.format(closed_port()), timeout=5)
+    row = build_http_row(f'http://127.0.0.1:{closed_port()}/', timeout=5)
     assert 'http_status' not in row
     assert row['error']
     assert row['latency_ms'] >= 0
@@ -511,7 +520,7 @@ def test_smoke_real_psutil_target_dies(tmp_path):
     child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
     try:
         sampler = soak_probe.Sampler(
-            psutil, log_dir=str(tmp_path), url='http://127.0.0.1:{}/'.format(closed_port()),
+            psutil, log_dir=str(tmp_path), url=f'http://127.0.0.1:{closed_port()}/',
             port=22267, http_timeout=2, pinned=[child.pid])
         deadline = time.time() + 10
         pinned = []
@@ -542,7 +551,7 @@ def test_main_once_writes_csv(tmp_path):
     (root / 'log').mkdir(parents=True)
     (root / 'log' / '2026-11-25_alas.txt').write_text('2026-11-25 08:00:00.000 | INFO | x\n', encoding='utf-8')
     code = soak_probe.main(['--once', '--out', str(out), '--alas-root', str(root), '--http-timeout', '2',
-                            '--url', 'http://127.0.0.1:{}/'.format(closed_port())])
+                            '--url', f'http://127.0.0.1:{closed_port()}/'])
     assert code == 0
     rows = read_csv(str(out))
     assert rows[0] == list(COLUMNS)
@@ -561,20 +570,20 @@ def test_parse_args_defaults():
 
 def test_no_heavy_imports():
     code = (
-        'import sys; sys.path.insert(0, {root!r}); import dev_tools.soak_probe; '
+        f'import sys; sys.path.insert(0, {ROOT!r}); import dev_tools.soak_probe; '
         'heavy = ("numpy", "cnocr", "mxnet", "adbutils", "rich", "module.logger", "module"); '
         'print(",".join(m for m in heavy if m in sys.modules))'
-    ).format(root=ROOT)
+    )
     output = subprocess.check_output([sys.executable, '-c', code], cwd=ROOT).decode().strip()
     assert output == ''
 
 
 def test_help_without_psutil():
     code = (
-        'import sys; sys.modules["psutil"] = None; sys.path.insert(0, {root!r}); '
+        f'import sys; sys.modules["psutil"] = None; sys.path.insert(0, {ROOT!r}); '
         'from dev_tools import soak_probe; sys.argv = ["soak_probe.py", "--help"]; soak_probe.main()'
-    ).format(root=ROOT)
-    result = subprocess.run([sys.executable, '-c', code], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    )
+    result = subprocess.run([sys.executable, '-c', code], cwd=ROOT, capture_output=True)
     assert result.returncode == 0
     assert b'soak probe' in result.stdout
 
@@ -710,7 +719,7 @@ def test_helper_main_output(capsys):
     assert soak_probe.main([soak_probe.HELPER_FLAG, str(os.getpid()), 'x']) == 0
     lines = capsys.readouterr().out.splitlines()
     assert len(lines) == 1
-    assert '"pid": {}'.format(os.getpid()) in lines[0]
+    assert f'"pid": {os.getpid()}' in lines[0]
 
 
 # ---------------------------------------------------------------- sampler wiring, fake psutil
@@ -756,7 +765,7 @@ class FakeLookup:
 
 def sampler_for(snaps, tmp_path, **kwargs):
     lookup = FakeLookup(snaps)
-    kwargs.setdefault('url', 'http://127.0.0.1:{}/'.format(closed_port()))
+    kwargs.setdefault('url', f'http://127.0.0.1:{closed_port()}/')
     sampler = soak_probe.Sampler(FakePs(snaps), log_dir=str(tmp_path), http_timeout=2, self_pid=999999,
                                  handle_lookup=lookup, **kwargs)
     return sampler, lookup
@@ -904,13 +913,13 @@ def trickle_server(header_delay, body_chunks, chunk_delay):
         while not stop.is_set():
             try:
                 conn, _ = sock.accept()
-            except socket.timeout:
+            except TimeoutError:
                 continue
             except OSError:
                 return
             try:
                 conn.recv(65536)
-                head = 'HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n'.format(body_chunks).encode()
+                head = f'HTTP/1.1 200 OK\r\nContent-Length: {body_chunks}\r\n\r\n'.encode()
                 if header_delay:
                     for i in range(len(head)):
                         if stop.is_set():
@@ -931,7 +940,7 @@ def trickle_server(header_delay, body_chunks, chunk_delay):
 
     thread = threading.Thread(target=serve, daemon=True)
     thread.start()
-    return sock, stop, 'http://127.0.0.1:{}/'.format(sock.getsockname()[1])
+    return sock, stop, f'http://127.0.0.1:{sock.getsockname()[1]}/'
 
 
 def test_http_status_at_headers_ignores_slow_body():
@@ -1009,7 +1018,7 @@ def test_main_unwritable_output_exits_1(tmp_path):
     blocker = tmp_path / 'file'
     blocker.write_text('x', encoding='utf-8')
     code = soak_probe.main(['--once', '--out', str(blocker / 'soak.csv'), '--alas-root', str(tmp_path),
-                            '--http-timeout', '1', '--url', 'http://127.0.0.1:{}/'.format(closed_port())])
+                            '--http-timeout', '1', '--url', f'http://127.0.0.1:{closed_port()}/'])
     assert code == 1
 
 

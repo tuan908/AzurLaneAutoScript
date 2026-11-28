@@ -65,7 +65,7 @@ def decompress_python(source, uncompressed_size):
                 repeat, rest = divmod(length, offset)
                 dst += chunk * repeat + chunk[:rest]
     except IndexError:
-        raise LZ4BlockError('Truncated LZ4 block')
+        raise LZ4BlockError('Truncated LZ4 block') from None
     if len(dst) != uncompressed_size:
         raise LZ4BlockError(f'Decompressed {len(dst)} bytes, expected {uncompressed_size}')
     return bytes(dst)

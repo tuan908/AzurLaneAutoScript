@@ -73,3 +73,22 @@ One entry per round: problem, options, choice, verification, anti-regression che
   `tests/control/fixtures/profile_names.json` lists valid names and invalid ones by reason,
   including both length boundaries. A Python test and the dashboard's schema test run it.
 - Verified: 26 Python cases, dashboard 108 tests.
+
+## Round 6 — enforced boundaries and one check command (T06, T12)
+
+- Boundaries (ADR 0003): `alasd/cmd/alasd/architecture_test.go` lists the allowed edges
+  between Go packages; `dashboard/src/architecture.test.ts` enforces the layers
+  `api → shared → features → app` and forbids cycles between features. Mutation checks:
+  a planted `worker → sidecar` import, a `features → app` import and a feature cycle were
+  each reported, then reverted.
+- Fixed on the way: `sidecar` imported `worker` only for its process helper, which is now
+  `internal/proc`; the instance test fixture moved from `features/instances` to `api`,
+  which removed the only layer violation (a test in `api` importing a feature).
+- Lint (T12): `ruff` on owned Python paths only (configured in `pyproject.toml`). 43
+  findings fixed. Mostly current-syntax upgrades, plus: re-raises in the worker and the LZ4
+  decoder now use `from None`, and loading OCR weights uses `zip(..., strict=True)` so a
+  corrupt params file fails instead of loading partially.
+- One command (T06, ADR 0004): `dev_tools/check.sh` runs Go (gofmt, vet for Linux and
+  Windows, race tests), Python (ruff, 1587 tests in one run) and the dashboard (types,
+  lint, format, 111 tests) in about 40 s; `.github/workflows/check.yml` runs it on this
+  fork's branches.

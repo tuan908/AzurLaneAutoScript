@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"alasd/internal/worker"
+	"alasd/internal/proc"
 )
 
 // Error returned by a sidecar method, the Python exception.
@@ -51,7 +51,7 @@ func (c *Client) ensure() error {
 	cmd.Dir = c.Root
 	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8", "PYTHONUNBUFFERED=1")
 	cmd.Stderr = prefixWriter{"[config] "}
-	worker.Detach(cmd)
+	proc.Detach(cmd)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return err

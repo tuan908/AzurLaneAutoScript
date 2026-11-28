@@ -12,7 +12,9 @@ import datetime
 import hashlib
 import json
 import re
-from typing import Any, Callable, ContextManager, Dict, Iterable, List, Optional, Tuple
+from collections.abc import Callable, Iterable
+from contextlib import AbstractContextManager
+from typing import Any
 
 from module.config.deep import deep_get, deep_set
 
@@ -28,7 +30,7 @@ class ConfigConflict(Exception):
 
 
 class ConfigInvalid(Exception):
-    def __init__(self, errors: Dict[str, str]):
+    def __init__(self, errors: dict[str, str]):
         super().__init__(errors)
         self.errors = errors
 
@@ -58,7 +60,7 @@ def _revision(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()[:16]
 
 
-def _label(i18n: dict, group: str, arg: str, default: str) -> Tuple[str, str]:
+def _label(i18n: dict, group: str, arg: str, default: str) -> tuple[str, str]:
     entry = deep_get(i18n, [group, arg], default={}) or {}
     if not isinstance(entry, dict):
         return default, ""
@@ -112,11 +114,11 @@ class ConfigService:
             args: Callable[[str], dict],
             menu: Callable[[str], dict],
             i18n: Callable[[str, str], dict],
-            read_raw: Callable[[str], Optional[bytes]],
+            read_raw: Callable[[str], bytes | None],
             read_config: Callable[[str], dict],
             write_config: Callable[[str, dict], None],
-            save_callback: Callable[[str, Any], Iterable[Tuple[str, Any]]] = lambda key, value: (),
-            lock: Callable[[str], ContextManager] = lambda name: contextlib.nullcontext(),
+            save_callback: Callable[[str, Any], Iterable[tuple[str, Any]]] = lambda key, value: (),
+            lock: Callable[[str], AbstractContextManager] = lambda name: contextlib.nullcontext(),
     ):
         """
         Args:
@@ -168,7 +170,7 @@ class ConfigService:
                 menus.append({"id": menu_id, "name": name, "tasks": tasks})
         return {"lang": lang, "menus": menus}
 
-    def _groups(self, task_args: dict, task: str, i18n: dict) -> List[dict]:
+    def _groups(self, task_args: dict, task: str, i18n: dict) -> list[dict]:
         groups = []
         for group, group_args in task_args.items():
             fields = []
@@ -181,7 +183,7 @@ class ConfigService:
                 groups.append({"id": group, "name": name, "help": help_text, "fields": fields})
         return groups
 
-    def _field(self, task: str, group: str, arg: str, meta: dict, i18n: dict) -> Optional[dict]:
+    def _field(self, task: str, group: str, arg: str, meta: dict, i18n: dict) -> dict | None:
         kind = meta.get("type")
         display = meta.get("display")
         if kind in HIDDEN_TYPES or display == "hide":
@@ -210,7 +212,7 @@ class ConfigService:
 
     # ------------------------------------------------------------ values
 
-    def create(self, instance_id: str, source: Optional[str]) -> None:
+    def create(self, instance_id: str, source: str | None) -> None:
         validate_profile_name(instance_id)
         if source is not None:
             self._require_alas(source)
@@ -230,7 +232,7 @@ class ConfigService:
             revision = _revision(self._read_raw(instance_id) or b"")
             return {"revision": revision, "config": _jsonable(self._read_config(instance_id))}
 
-    def update(self, instance_id: str, revision: str, changes: Dict[str, Any]) -> dict:
+    def update(self, instance_id: str, revision: str, changes: dict[str, Any]) -> dict:
         """
         Apply changes {"Task.Group.Arg": value} if the file still has `revision`.
 
@@ -244,7 +246,7 @@ class ConfigService:
         with self._lock(instance_id):
             return self._update_locked(instance_id, revision, changes)
 
-    def _update_locked(self, instance_id: str, revision: str, changes: Dict[str, Any]) -> dict:
+    def _update_locked(self, instance_id: str, revision: str, changes: dict[str, Any]) -> dict:
         raw = self._read_raw(instance_id)
         current = _revision(raw or b"")
         if revision != current:

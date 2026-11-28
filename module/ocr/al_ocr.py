@@ -88,18 +88,18 @@ class AlOcr:
              name=None,
              ):
         self._model_name = model_name
-        self._model_file_prefix = '{}-{}'.format(MODEL_FILE_PREFIX, model_name)
+        self._model_file_prefix = f'{MODEL_FILE_PREFIX}-{model_name}'
         self._model_epoch = model_epoch
         self._model_dir = root
         self._assert_and_prepare_model_files()
         self._alphabet, self._inv_alph_dict = read_charset(os.path.join(self._model_dir, 'label_cn.txt'))
         self._cand_alph_idx = None
         _limit_blas_threads()
-        logger.info('Loading OCR model: %s' % self._model_dir)
+        logger.info(f'Loading OCR model: {self._model_dir}')
         prefix = os.path.join(self._model_dir, self._model_file_prefix)
         self._model = CrnnModel(
-            symbol_file='%s-symbol.json' % prefix,
-            params_file='%s-%04d.params' % (prefix, self._model_epoch),
+            symbol_file=f'{prefix}-symbol.json',
+            params_file=f'{prefix}-{self._model_epoch:04d}.params',
         )
         self._model_loaded = True
 
@@ -175,8 +175,8 @@ class AlOcr:
         model_dir = self._model_dir
         model_files = [
             'label_cn.txt',
-            '%s-%04d.params' % (self._model_file_prefix, self._model_epoch),
-            '%s-symbol.json' % self._model_file_prefix,
+            f'{self._model_file_prefix}-{self._model_epoch:04d}.params',
+            f'{self._model_file_prefix}-symbol.json',
         ]
         for f in model_files:
             if not os.path.exists(os.path.join(model_dir, f)):

@@ -70,3 +70,23 @@ pythonpath = ["."]
 # tmp_path for the parcel fixtures and the screenshot lookups.
 tmp_path_retention_count = 1
 tmp_path_retention_policy = "failed"
+
+# Lint of the Python code this fork owns (doc/governance ADR 0001). Upstream ALAS code is
+# not linted here: it keeps its own style so merges stay clean. Run through dev_tools/check.sh.
+[tool.ruff]
+target-version = "py315"
+line-length = 120
+include = [
+    "module/control/**/*.py",
+    "module/ocr/crnn.py",
+    "module/ocr/al_ocr.py",
+    "module/device/method/lz4_block.py",
+    "dev_tools/fake_worker.py",
+    "tests/control/**/*.py",
+    "tests/ocr/**/*.py",
+    "tests/device/test_lz4_block.py",
+]
+
+[tool.ruff.lint]
+# Pyflakes, syntax errors, bugbear, pylint errors, import order, syntax of current Python
+select = ["F", "E9", "B", "PLE", "I", "UP"]

@@ -20,6 +20,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"alasd/internal/proc"
 	"alasd/internal/timeutil"
 )
 
@@ -204,7 +205,7 @@ func (m *Manager) start(fn string) (bool, error) {
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = m.cfg.Root
 	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8", "PYTHONUNBUFFERED=1")
-	Detach(cmd)
+	proc.Detach(cmd)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return false, err
