@@ -161,5 +161,5 @@ Acceptance criteria, for the owned code (ADR 0001):
 - Contracts preserved: no API change except removing the dead `logQueueManagerAlive`
   field (nothing read it); all suites green.
 
-Pending decisions: T11 (upstream file), T16 (UX wording). Not merged into
-`modernize/main` yet: branch `governance/main` in the worktree `../alas-governance`.
+Pending decisions: T11 (upstream file), T16 (UX wording). Merged into `modernize/main`
+on 2026-11-28 (fast-forward to `57e351265`).

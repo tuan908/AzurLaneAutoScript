@@ -4,7 +4,7 @@ name: check
 
 on:
   push:
-    branches: [modernize/main, governance/main]
+    branches: [modernize/main]
   pull_request:
     branches: [modernize/main]
 
