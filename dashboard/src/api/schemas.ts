@@ -224,7 +224,8 @@ export const PolicyUpdateSchema = z.object({
   instances: z.record(z.string(), PolicyOverrideSchema).exactOptional(),
 });
 
-// Same rule as the server (module/control/configuration.py).
+// Same rule as the server (validate_profile_name in module/control/configuration.py); both
+// test against tests/control/fixtures/profile_names.json.
 const RESERVED_NAME = /^(template.*|con|prn|aux|nul|com\d|lpt\d)$/i;
 
 export const ProfileNameSchema = z

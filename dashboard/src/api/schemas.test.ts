@@ -3,6 +3,7 @@ import type * as z from "zod";
 
 import { instanceFixture } from "@/features/instances/test-fixtures";
 
+import names from "../../../tests/control/fixtures/profile_names.json";
 import contract from "../../openapi.json";
 import type { components } from "./generated";
 import {
@@ -125,27 +126,23 @@ describe("other responses", () => {
   });
 });
 
+// Same fixture as tests/control/test_profile_names.py, which checks the server's rule.
 describe("ProfileNameSchema", () => {
-  it.each(["main", "alas2", "event_farm", "A-1"])("accepts %s", (name) => {
+  it.each(names.valid)("accepts %j", (name) => {
     expect(ProfileNameSchema.safeParse(name).success).toBe(true);
   });
 
-  it("trims before checking", () => {
-    expect(ProfileNameSchema.parse("  main  ")).toBe("main");
-  });
-
   it.each([
-    ["", "Use 1–48"],
-    ["-lead", "Use 1–48"],
-    ["has space", "Use 1–48"],
-    ["x".repeat(49), "Use 1–48"],
-    ["template-copy", "reserved"],
-    ["CON", "reserved"],
-    ["lpt1", "reserved"],
+    ...names.invalid.format.map((name) => [name, "Use 1–48"]),
+    ...names.invalid.reserved.map((name) => [name, "reserved"]),
   ])("rejects %j with a readable reason", (name, reason) => {
     const result = ProfileNameSchema.safeParse(name);
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]?.message).toContain(reason);
+  });
+
+  it("trims before checking", () => {
+    expect(ProfileNameSchema.parse("  main  ")).toBe("main");
   });
 });
 

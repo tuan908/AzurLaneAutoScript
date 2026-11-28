@@ -90,6 +90,21 @@ def _matches(pattern: str, value: str) -> bool:
     return re.fullmatch(pattern, value) is not None
 
 
+def validate_profile_name(name: str) -> None:
+    """
+    Rule of a new profile name. The dashboard checks the same rule before sending; both test
+    against tests/control/fixtures/profile_names.json.
+
+    Raises:
+        ValueError: with the message shown to the user.
+    """
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,47}", name):
+        raise ValueError("Use 1–48 letters, digits, hyphens or underscores, starting with a letter or digit")
+    # `template*` names are templates to ALAS; the rest are reserved file names on Windows
+    if name.lower().startswith("template") or re.fullmatch(r"CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9]", name, flags=re.I):
+        raise ValueError("This profile name is reserved")
+
+
 class ConfigService:
     def __init__(
             self,
@@ -196,11 +211,7 @@ class ConfigService:
     # ------------------------------------------------------------ values
 
     def create(self, instance_id: str, source: Optional[str]) -> None:
-        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,47}", instance_id):
-            raise ValueError("Use 1–48 letters, digits, hyphens or underscores, starting with a letter or digit")
-        if instance_id.lower().startswith("template") or re.fullmatch(
-                r"CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9]", instance_id, flags=re.I):
-            raise ValueError("This profile name is reserved")
+        validate_profile_name(instance_id)
         if source is not None:
             self._require_alas(source)
             with self._lock(source):

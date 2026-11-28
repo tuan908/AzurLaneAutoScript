@@ -62,3 +62,14 @@ One entry per round: problem, options, choice, verification, anti-regression che
   level, plain text inherits the entry above it, a traceback or exception line is an error.
 - Verified: existing tests unchanged and passing; new tests for both formats, the `│`
   separator and the level-not-message rule (93 tests).
+
+## Round 5 — profile name rule tested on both sides (T13)
+
+- Problem: the dashboard copied the server's profile name rule ("Same rule as the server")
+  with nothing checking the copies agree.
+- Options: a `pattern` in `openapi.json` (can't express case-insensitive reserved names in
+  JSON Schema); a shared fixture.
+- Choice: `validate_profile_name` in `module/control/configuration.py` is the rule, and
+  `tests/control/fixtures/profile_names.json` lists valid names and invalid ones by reason,
+  including both length boundaries. A Python test and the dashboard's schema test run it.
+- Verified: 26 Python cases, dashboard 108 tests.

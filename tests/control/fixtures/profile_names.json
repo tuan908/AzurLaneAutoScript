@@ -1,0 +1,37 @@
+{
+  "about": "Rule of a new profile name. Python: module.control.configuration.validate_profile_name (the server). Dashboard: ProfileNameSchema in dashboard/src/api/schemas.ts. Both test against these names.",
+  "valid": [
+    "alas",
+    "alas2",
+    "A",
+    "my-profile_1",
+    "con1",
+    "lpt",
+    "comX",
+    "p12345678901234567890123456789012345678901234567"
+  ],
+  "invalid": {
+    "format": [
+      "",
+      "-alas",
+      "_alas",
+      "has space",
+      "中文",
+      "alas.json",
+      "a/b",
+      "p123456789012345678901234567890123456789012345678"
+    ],
+    "reserved": [
+      "template",
+      "Template2",
+      "template-maa",
+      "con",
+      "CON",
+      "prn",
+      "aux",
+      "nul",
+      "com1",
+      "LPT9"
+    ]
+  }
+}
