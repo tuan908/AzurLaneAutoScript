@@ -310,8 +310,6 @@ func (a *API) healthBody(detailed bool) map[string]any {
 		"serverPid":     os.Getpid(),
 		"uptimeSeconds": float64(now.Sub(a.startedAt).Milliseconds()) / 1000,
 		"instances":     map[string]int{"total": len(statuses), "running": running, "failed": failed},
-		// No SyncManager any more; kept true for clients that read it
-		"logQueueManagerAlive": true,
 	}
 	if a.Monitor != nil {
 		body["health"] = a.Monitor.Checks()

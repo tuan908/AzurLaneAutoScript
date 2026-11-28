@@ -460,8 +460,6 @@ func (m *Monitor) Checks() Checks {
 	now := m.Clock()
 	checks := []Check{
 		{Name: "server", Status: "ok", Detail: fmt.Sprintf("pid %d", os.Getpid())},
-		// Kept for the dashboard: workers send their logs over their own pipes now
-		{Name: "logQueueManager", Status: "ok", Detail: "Workers send their logs over their stdout pipes"},
 	}
 	m.mu.Lock()
 	monitor := Check{Name: "healthMonitor", Status: "ok"}

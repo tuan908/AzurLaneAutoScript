@@ -39,6 +39,13 @@ func DefaultPolicy() Policy {
 	return Policy{MaxRestartsPerHour: 3, BackoffSeconds: []int{30, 120, 300}, Instances: map[string]Override{}}
 }
 
+// Policy limits. dashboard/openapi.json states them as minimum/maximum; policy_test.go compares.
+const (
+	MaxRestartsPerHour = 60
+	MaxStallMinutes    = 1440
+	MaxBackoffSeconds  = 86400
+)
+
 var defaultInstance = InstancePolicy{AutoRestart: true, RestartOnStall: false, StallMinutes: 30}
 
 func (p Policy) clone() Policy {
@@ -153,8 +160,8 @@ func (s *PolicyStore) Update(changes any) (Policy, error) {
 		switch key {
 		case "maxRestartsPerHour":
 			n, ok := asInt(value)
-			if !ok || n < 0 || n > 60 {
-				return Policy{}, ValidationError("maxRestartsPerHour must be an integer from 0 to 60")
+			if !ok || n < 0 || n > MaxRestartsPerHour {
+				return Policy{}, ValidationError(fmt.Sprintf("maxRestartsPerHour must be an integer from 0 to %d", MaxRestartsPerHour))
 			}
 			next.MaxRestartsPerHour = n
 		case "backoffSeconds":
@@ -165,7 +172,7 @@ func (s *PolicyStore) Update(changes any) (Policy, error) {
 			var secs []int
 			for _, item := range list {
 				n, ok := asInt(item)
-				if !ok || n < 0 || n > 86400 {
+				if !ok || n < 0 || n > MaxBackoffSeconds {
 					return Policy{}, ValidationError("backoffSeconds must be a list of seconds")
 				}
 				secs = append(secs, n)
@@ -196,8 +203,8 @@ func (s *PolicyStore) Update(changes any) (Policy, error) {
 						}
 					case "stallMinutes":
 						n, ok := asInt(v)
-						if _, isBool := v.(bool); isBool || !ok || n < 0 || n > 1440 {
-							return Policy{}, ValidationError(fmt.Sprintf("instances.%s.stallMinutes must be 0 to 1440", iid))
+						if _, isBool := v.(bool); isBool || !ok || n < 0 || n > MaxStallMinutes {
+							return Policy{}, ValidationError(fmt.Sprintf("instances.%s.stallMinutes must be 0 to %d", iid, MaxStallMinutes))
 						}
 						merged.StallMinutes = &n
 					default:

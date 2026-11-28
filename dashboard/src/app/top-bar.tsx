@@ -67,7 +67,6 @@ export function TopBar({ theme, onTheme }: { theme: Theme; onTheme: (t: Theme) =
             </Chip>
           </>
         )}
-        {h?.logQueueManagerAlive === false && <Chip className="text-bad">Log queue down</Chip>}
         <Select
           className="min-h-7! w-24! min-w-0! rounded-full! border-transparent! bg-fill! text-xs!"
           label="Settings language"

@@ -346,8 +346,6 @@ export interface components {
             apiVersion: number;
             health?: components["schemas"]["HealthChecks"];
             instances: components["schemas"]["InstanceCounts"];
-            /** Logqueuemanageralive */
-            logQueueManagerAlive?: boolean | null;
             /** Serverpid */
             serverPid: number;
             /** Status */
@@ -387,8 +385,6 @@ export interface components {
             /** Instancedetails */
             instanceDetails: components["schemas"]["InstanceStatus"][];
             instances: components["schemas"]["InstanceCounts"];
-            /** Logqueuemanageralive */
-            logQueueManagerAlive?: boolean | null;
             metrics: components["schemas"]["Metrics"];
             /** Serverpid */
             serverPid: number;

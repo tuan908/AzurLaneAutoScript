@@ -33,3 +33,19 @@ One entry per round: problem, options, choice, verification, anti-regression che
 - Also: the redundant error branch in `instances.Tasks` and the duplicated "owned by an
   earlier server" message are gone; `gofmt` applied to `alasd`.
 - Verified: all Go and Python tests pass.
+
+## Round 3 — fake health signal deleted, policy limits single-sourced (T02, T10)
+
+- T02: `logQueueManager` check and `logQueueManagerAlive` reported a process that no longer
+  exists and were hard-coded to ok/true. Deleted from `openapi.json`, `alasd`, the generated
+  types, the zod schema and the top bar's "Log queue down" chip, which could never show.
+  Old clients are unaffected: the dashboard's zod objects drop unknown keys, and nothing
+  else read the field (`sync-control.py`, `soak_probe.py` checked).
+- T10: the recovery policy limits now live in `openapi.json` as `minimum`/`maximum`
+  (`maxRestartsPerHour` ≤ 60, `stallMinutes` ≤ 1440, backoff items ≤ 86400, at least one).
+  Go and the dashboard keep named constants for them, and a test on each side compares the
+  constant with the contract. The dashboard now also bounds backoff values, which it didn't.
+  The API contract test validates `minimum`/`maximum` too.
+- Considered: importing `openapi.json` into the dashboard bundle to read the limits; rejected
+  (ships the whole contract to the browser for three numbers).
+- Verified: Go tests, dashboard typecheck/lint/format and 88 unit tests.

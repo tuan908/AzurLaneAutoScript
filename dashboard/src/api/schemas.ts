@@ -30,8 +30,10 @@ export const FIELD_TYPES = [
   "state",
 ] as const;
 
+// Policy limits of the contract (openapi.json minimum/maximum); schemas.test.ts compares them.
 export const MAX_STALL_MINUTES = 1440;
 export const MAX_RESTARTS_PER_HOUR = 60;
+export const MAX_BACKOFF_SECONDS = 86400;
 
 // ------------------------------------------------------------------ instances
 
@@ -100,7 +102,6 @@ export const HealthSchema = z.object({
   serverPid: z.int(),
   uptimeSeconds: z.number().nonnegative(),
   instances: InstanceCountsSchema,
-  logQueueManagerAlive: z.boolean().nullable().exactOptional(),
   health: HealthChecksSchema.exactOptional(),
 });
 
@@ -196,7 +197,7 @@ export const PolicyOverrideSchema = z.object({
 
 export const RecoveryPolicySchema = z.object({
   maxRestartsPerHour: z.int().min(0).max(MAX_RESTARTS_PER_HOUR),
-  backoffSeconds: z.array(count),
+  backoffSeconds: z.array(z.int().min(0).max(MAX_BACKOFF_SECONDS)).min(1),
   instances: z.record(z.string(), PolicyOverrideSchema),
 });
 
@@ -219,7 +220,7 @@ export const PolicyAppliedSchema = z.object({ policy: RecoveryPolicySchema });
 
 export const PolicyUpdateSchema = z.object({
   maxRestartsPerHour: RecoveryPolicySchema.shape.maxRestartsPerHour.exactOptional(),
-  backoffSeconds: z.array(count).exactOptional(),
+  backoffSeconds: RecoveryPolicySchema.shape.backoffSeconds.exactOptional(),
   instances: z.record(z.string(), PolicyOverrideSchema).exactOptional(),
 });
 

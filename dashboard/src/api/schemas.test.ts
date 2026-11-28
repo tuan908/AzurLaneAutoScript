@@ -3,6 +3,7 @@ import type * as z from "zod";
 
 import { instanceFixture } from "@/features/instances/test-fixtures";
 
+import contract from "../../openapi.json";
 import type { components } from "./generated";
 import {
   ConfigAppliedSchema,
@@ -17,6 +18,9 @@ import {
   PolicyAppliedSchema,
   PolicyOverrideSchema,
   PolicyUpdateSchema,
+  MAX_BACKOFF_SECONDS,
+  MAX_RESTARTS_PER_HOUR,
+  MAX_STALL_MINUTES,
   ProfileNameSchema,
   RecoverySnapshotSchema,
   TasksSchema,
@@ -142,5 +146,18 @@ describe("ProfileNameSchema", () => {
     const result = ProfileNameSchema.safeParse(name);
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]?.message).toContain(reason);
+  });
+});
+
+describe("policy limits match the contract", () => {
+  const schemas = contract.components.schemas;
+  it("uses the minimum/maximum of openapi.json", () => {
+    for (const name of ["RecoveryPolicy", "PolicyUpdate"] as const) {
+      expect(schemas[name].properties.maxRestartsPerHour.maximum).toBe(MAX_RESTARTS_PER_HOUR);
+      expect(schemas[name].properties.backoffSeconds.items.maximum).toBe(MAX_BACKOFF_SECONDS);
+    }
+    for (const name of ["InstancePolicy", "PolicyOverride"] as const) {
+      expect(schemas[name].properties.stallMinutes.maximum).toBe(MAX_STALL_MINUTES);
+    }
   });
 });
