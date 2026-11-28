@@ -16,6 +16,7 @@ def test_listing(case, tmp_path, monkeypatch):
     for name in case["files"]:
         (tmp_path / "config" / name).write_text("{}")
     monkeypatch.chdir(tmp_path)
-    got = sorted({"id": name, "func": get_config_mod(name)}.items() for name in alas_instance())
-    want = sorted({"id": i["id"], "func": i["func"]}.items() for i in case["instances"])
+    # Same set as the fixture; the order of os.listdir differs between filesystems
+    got = sorted((name, get_config_mod(name)) for name in alas_instance())
+    want = sorted((i["id"], i["func"]) for i in case["instances"])
     assert got == want
