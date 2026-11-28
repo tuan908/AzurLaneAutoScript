@@ -35,8 +35,8 @@ browser ── HTTP + SSE ──▶ alasd (Go)                       one per ALA
 | Contract | Source | Checked by |
 |---|---|---|
 | HTTP API and event payloads | `dashboard/openapi.json` | Go `contract_test.go`, `TestRoutesMatchOpenAPI`; dashboard `schemas.test.ts` (ADR 0002) |
-| Recovery policy limits | `openapi.json` `minimum`/`maximum` | Go `limits_test.go`, dashboard `schemas.test.ts` |
-| Worker protocol: exit codes, lock folder, `log` key, `stop` command | `module/exception.py`, `module/control/worker.py` | Go `protocol_test.go` |
+| Recovery policy limits | `openapi.json` `minimum`/`maximum` | Go `health/contract_test.go`, dashboard `schemas.test.ts` |
+| Worker protocol: exit codes, lock folder, `log` key, `stop` command, takeover log line | `module/exception.py`, `module/control/worker.py` | Go `worker/protocol_test.go`, `health/contract_test.go` |
 | Sidecar methods | `module/control/sidecar.py` | Go `sidecar_test.go` (both directions) |
 | Instance listing rule | upstream `alas_instance()` | `tests/control/fixtures/instance_listing.json`, Go and Python tests |
 | Profile name rule | `validate_profile_name` in `module/control/configuration.py` | `tests/control/fixtures/profile_names.json`, Python and dashboard tests |

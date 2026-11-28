@@ -3,6 +3,7 @@ package health
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -39,5 +40,23 @@ func TestPolicyLimitsMatchContract(t *testing.T) {
 	}
 	for _, schema := range []string{"InstancePolicy", "PolicyOverride"} {
 		check(schema+".stallMinutes", s[schema].Properties["stallMinutes"].Maximum, MaxStallMinutes)
+	}
+}
+
+// A crashed worker counts as a human takeover when its log has the line the Python worker
+// writes on RequestHumanTakeover.
+func TestTakeoverMarkerMatchesWorker(t *testing.T) {
+	src, err := os.ReadFile("../../../module/control/worker.py")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, marker := range humanTakeoverMarkers {
+		if strings.Contains(string(src), `logger.critical("`+marker+`")`) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("module/control/worker.py logs none of %q on RequestHumanTakeover", humanTakeoverMarkers)
 	}
 }
