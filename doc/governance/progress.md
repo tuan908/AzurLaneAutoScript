@@ -130,3 +130,13 @@ One entry per round: problem, options, choice, verification, anti-regression che
   group now fails with exit code 2. Full runs (no arguments, as CI calls it) were not affected.
 - Verified: planted drift in `generated.ts` and in `requirements.txt` each fail the right
   group; the full run is green.
+
+## Round 9b — review pass and the scheduler log markers (T18)
+
+- Review of the whole branch diff instead of a separate reviewer (per earlier feedback to
+  skip review loops): one stale comment fixed; worker log parsing, `sync-control` process
+  matching and the lint edits confirmed behaviour-preserving; `alasd.exe` still cross-builds.
+- T18: `tests/control/fixtures/scheduler_log.json` holds the marker templates and sample
+  lines (both separators, and upstream's end marker without a result). A Python test checks
+  `alas.py` still logs those templates; `alasd` (current task, success/failure counters) and
+  the dashboard (recent completions) test against the same lines.

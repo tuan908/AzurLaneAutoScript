@@ -1,0 +1,16 @@
+{
+  "about": "Scheduler markers in the worker log. alas.py writes them (tests/control/test_scheduler_log.py checks the templates); alasd reads start/end/result for currentTask and task counters (internal/worker), the dashboard reads end/result/time for recent completions (features/scheduler/completions.ts). Upstream logs the end marker without a result.",
+  "templates": {
+    "start": "Scheduler: Start task `{task}`",
+    "end": "Scheduler: End task `{task}` [{outcome}]"
+  },
+  "lines": [
+    {"text": "INFO     21:14:22.713 │ Scheduler: Start task `Commission`", "start": "Commission"},
+    {"text": "INFO     21:14:23.000 │ Click @ SCHEDULER_TASK_LIST"},
+    {"text": "INFO     21:20:01.000 │ Scheduler: End task `Commission` [success]", "end": "Commission", "result": "success", "time": "21:20:01"},
+    {"text": "INFO     21:20:05.000 │ Scheduler: Start task `Reward`", "start": "Reward"},
+    {"text": "INFO     21:21:00.500 │ Scheduler: End task `Reward` [failure]", "end": "Reward", "result": "failure", "time": "21:21:00"},
+    {"text": "2026-11-26 22:58:57.366 | INFO | Scheduler: End task `Exercise`", "end": "Exercise", "result": null, "time": "22:58:57"}
+  ],
+  "counters": {"successes": 1, "failures": 1}
+}

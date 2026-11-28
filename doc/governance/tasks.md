@@ -22,4 +22,5 @@ Priority: H = contract or correctness risk, M = duplication or dead code, L = ti
 | T15 | H | Error contract | `alasd` maps sidecar errors to HTTP statuses by Python class name, unchecked: a rename would turn a 409 into a 500. | Test that each mapped name is a Python exception class. | done |
 | T16 | L | Dashboard UX | The same "next run" time reads "in 2h 5m" in the scheduler (`untilNextRun`) and "in 2 hours" in settings (`relativeTime`). | Pick one wording; then delete the other helper. | pending: UX decision |
 | T17 | M | Toolchain | `uv.lock`, `requirements.txt` and `dashboard/src/api/generated.ts` are generated from a source but nothing checked they were regenerated. | `check.sh` fails on a stale one, with the command that fixes it. | done |
+| T18 | M | Worker log protocol | The scheduler markers (`Start task`, `End task … [success/failure]`; the result is this fork's addition to upstream's message) are parsed by `alasd` and by the dashboard, with nothing tying either to what `alas.py` writes. | One fixture: Python checks `alas.py` logs the templates, Go and the dashboard parse the same lines. | done |
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import scheduler from "../../../../tests/control/fixtures/scheduler_log.json";
 import { parseCompletion, recentCompletions } from "./completions";
 
 const line = (seq: number, text: string) => ({ seq, text });
@@ -43,5 +44,15 @@ describe("recentCompletions", () => {
       line(4, "Scheduler: End task `C` [success]"),
     ];
     expect(recentCompletions(lines, 2).map((c) => c.task)).toEqual(["C", "B"]);
+  });
+});
+
+// Same fixture as alasd's worker test and tests/control/test_scheduler_log.py, which checks
+// that alas.py writes these markers.
+describe("scheduler markers fixture", () => {
+  it.each(scheduler.lines.map((l, i) => [i + 1, l] as const))("line %i", (seq, l) => {
+    const parsed = parseCompletion({ seq, text: l.text });
+    if (!("end" in l)) return expect(parsed).toBeNull();
+    expect(parsed).toEqual({ seq, time: l.time, task: l.end, result: l.result });
   });
 });

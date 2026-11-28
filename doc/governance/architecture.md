@@ -40,6 +40,7 @@ browser ── HTTP + SSE ──▶ alasd (Go)                       one per ALA
 | Sidecar methods | `module/control/sidecar.py` | Go `sidecar_test.go` (both directions) |
 | Instance listing rule | upstream `alas_instance()` | `tests/control/fixtures/instance_listing.json`, Go and Python tests |
 | Profile name rule | `validate_profile_name` in `module/control/configuration.py` | `tests/control/fixtures/profile_names.json`, Python and dashboard tests |
+| Scheduler markers in the log | `alas.py` templates, `tests/control/fixtures/scheduler_log.json` | Python, Go and dashboard tests |
 | ALAS log line format | upstream logger | dashboard `features/logs/log-format.ts`, its tests |
 
 ## Module rules
