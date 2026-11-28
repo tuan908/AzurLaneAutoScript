@@ -17,7 +17,7 @@ jobs:
         with:
           go-version-file: alasd/go.mod
           cache-dependency-path: alasd/go.sum
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.4.0
       - uses: oven-sh/setup-bun@v2
       # Python 3.15 from .python-version, dependencies from uv.lock
       - run: uv sync --frozen
